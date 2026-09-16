@@ -87,7 +87,7 @@ export function GroupDetectionPage({ records, onClose }: { records: ConnectionRe
                 <div className="flex flex-wrap gap-2">
                   {group.members.map(name => (
                     <span key={name} className={`px-2 py-1 rounded-sm text-sm border ${name === group.leader ? 'bg-green-900/50 border-green-500 text-green-300' : 'bg-zinc-950 border-green-900/50 text-green-500/80'}`}>
-                      [ {name} ]
+                      {name}
                     </span>
                   ))}
                 </div>

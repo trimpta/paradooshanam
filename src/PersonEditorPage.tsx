@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Gender } from './App';
+import { Gender, fuzzyMatch } from './App';
 
 interface PersonEditorPageProps {
   names: string[];
@@ -26,7 +26,7 @@ export function PersonEditorPage({ names, genders, onSave, onClose }: PersonEdit
     setEditingName(null);
   };
 
-  const filteredNames = names.filter(n => n.includes(searchQuery.toLowerCase().replace(/\s/g, '')));
+  const filteredNames = names.filter(n => fuzzyMatch(searchQuery, n));
 
   return (
     <div className="absolute inset-0 z-[60] bg-zinc-950 text-green-500 font-mono flex flex-col">

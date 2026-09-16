@@ -13,6 +13,23 @@ export interface ConnectionRecord {
   score: number;
 }
 
+export function fuzzyMatch(pattern: string, str: string): boolean {
+  if (pattern === '') return true;
+  let patternIdx = 0;
+  let strIdx = 0;
+  const p = pattern.toLowerCase();
+  const s = str.toLowerCase();
+  
+  while (patternIdx !== p.length && strIdx !== s.length) {
+    if (p.charAt(patternIdx) === s.charAt(strIdx)) {
+      patternIdx++;
+    }
+    strIdx++;
+  }
+  
+  return patternIdx === p.length;
+}
+
 function useKeyboardState() {
   const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
   const [viewportHeight, setViewportHeight] = useState(
@@ -337,9 +354,8 @@ export default function App() {
   if (activeOutTool === 'GENDER') return <GenderAnalysisPage names={names} genders={genders} records={records} onClose={() => setActiveOutTool(null)} />;
 
   const filteredRecords = records.filter(r => 
-    searchQuery === '' || 
-    r.personOne.toLowerCase().includes(searchQuery.toLowerCase()) || 
-    r.personTwo.toLowerCase().includes(searchQuery.toLowerCase())
+    fuzzyMatch(searchQuery, r.personOne) || 
+    fuzzyMatch(searchQuery, r.personTwo)
   );
 
   return (
@@ -474,19 +490,10 @@ export default function App() {
                 />
               </div>
 
-              {!conflictRecord && (
-                <>
-                  <div className="w-full relative overflow-hidden bg-zinc-950 rounded border border-green-900/50 h-16 mt-2 mb-2">
-                    <ScoreSelector score={score} onChange={setScore} />
-                  </div>
-                  <button 
-                    onClick={handleSave}
-                    disabled={!personOne.trim() || !personTwo.trim()}
-                    className="w-full bg-green-900/30 text-green-400 border border-green-900/50 py-3 font-bold uppercase tracking-widest disabled:opacity-50"
-                  >
-                    [ Save ]
-                  </button>
-                </>
+              {conflictRecord && (
+                <div className="text-zinc-500 text-xs mt-1">
+                  Conflict: existing score is <span className="text-green-400 font-bold">{conflictRecord.score}</span>
+                </div>
               )}
             </div>
           )}
@@ -620,7 +627,7 @@ export default function App() {
 
       {/* Bottom: Header/Menu OR Score Selector */}
       <div className="shrink-0 h-20 flex items-center p-2 gap-4 bg-zinc-900/50">
-        {!isInputMode || mainTab === 'OUT' ? (
+        {(!isInputMode || mainTab === 'OUT' || !showAddForm) ? (
           <div className="w-full flex items-center justify-between px-2 gap-2">
             <h1 className="text-base sm:text-lg font-bold uppercase tracking-wider text-green-400 shrink-0">Paradooshanam</h1>
             
