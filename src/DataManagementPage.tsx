@@ -1,21 +1,29 @@
 import { useState } from 'react';
-import { ConnectionRecord } from './App';
+import { ConnectionRecord, Gender } from './App';
 import { GraphVisualizer } from './GraphPage';
 
 interface DataManagementPageProps {
   records: ConnectionRecord[];
+  names: string[];
+  genders: Record<string, Gender>;
   onClose: () => void;
   onImport: (records: ConnectionRecord[]) => void;
+  onImportGenders: (genders: Record<string, Gender>) => void;
 }
 
 export function DataManagementPage({ 
   records, 
+  names,
+  genders,
   onClose,
-  onImport
+  onImport,
+  onImportGenders
 }: DataManagementPageProps) {
   const [downloadFormat, setDownloadFormat] = useState<'txt' | 'csv' | null>(null);
+  const [downloadMode, setDownloadMode] = useState<'CONNECTIONS' | 'GENDERS'>('CONNECTIONS');
   const [importText, setImportText] = useState('');
   const [activeTab, setActiveTab] = useState<'EXPORT' | 'IMPORT'>('EXPORT');
+  const [importMode, setImportMode] = useState<'CONNECTIONS' | 'GENDERS'>('CONNECTIONS');
 
   // Preview State
   const [previewRecords, setPreviewRecords] = useState<{ personOne: string, personTwo: string, score: number }[] | null>(null);
@@ -26,14 +34,18 @@ export function DataManagementPage({
   const rawText = records.map(r => `${r.personOne} ${r.personTwo} ${r.score}`).join('\n');
   const csvText = records.map(r => `${r.personOne},${r.personTwo},${r.score}`).join('\n');
 
-  const handleCopy = async () => {
+  const rawGenderText = names.map(n => `${n} ${genders[n] || 'U'}`).join('\n');
+  const csvGenderText = names.map(n => `${n},${genders[n] || 'U'}`).join('\n');
+
+  const handleCopy = async (mode: 'CONNECTIONS' | 'GENDERS') => {
     try {
+      const textToCopy = mode === 'CONNECTIONS' ? rawText : rawGenderText;
       if (navigator.clipboard && window.isSecureContext) {
-        await navigator.clipboard.writeText(rawText);
+        await navigator.clipboard.writeText(textToCopy);
         alert('Copied to clipboard!');
       } else {
         const textArea = document.createElement("textarea");
-        textArea.value = rawText;
+        textArea.value = textToCopy;
         textArea.style.position = "absolute";
         textArea.style.left = "-999999px";
         document.body.prepend(textArea);
@@ -55,19 +67,41 @@ export function DataManagementPage({
   };
 
   const handleDownload = (format: 'txt' | 'csv') => {
-    const text = format === 'csv' ? csvText : rawText;
+    const text = downloadMode === 'CONNECTIONS' ? (format === 'csv' ? csvText : rawText) : (format === 'csv' ? csvGenderText : rawGenderText);
     const blob = new Blob([text], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `paradooshanam_records.${format}`;
+    a.download = downloadMode === 'CONNECTIONS' ? `paradooshanam_records.${format}` : `paradooshanam_genders.${format}`;
     a.click();
     URL.revokeObjectURL(url);
     setDownloadFormat(null);
   };
 
-  const processImportText = (text: string) => {
+  const processImportText = (text: string, mode: 'CONNECTIONS' | 'GENDERS') => {
     const lines = text.split('\n');
+    
+    if (mode === 'GENDERS') {
+      const newGenders: Record<string, Gender> = {};
+      for (const line of lines) {
+        const parts = line.trim().split(/[\s,]+/);
+        if (parts.length >= 2) {
+          const name = parts.slice(0, -1).join(' ').toLowerCase();
+          const g = parts[parts.length - 1].toUpperCase();
+          if (g === 'M' || g === 'F' || g === 'U') {
+            newGenders[name] = g as Gender;
+          }
+        }
+      }
+      if (Object.keys(newGenders).length === 0) {
+        alert("No valid gender records found.");
+        return;
+      }
+      onImportGenders(newGenders);
+      setImportText('');
+      return;
+    }
+
     const newRecords: { personOne: string, personTwo: string, score: number }[] = [];
     let minScore = Infinity;
     let maxScore = -Infinity;
@@ -107,7 +141,7 @@ export function DataManagementPage({
     const reader = new FileReader();
     reader.onload = (event) => {
       const content = event.target?.result as string;
-      if (content) processImportText(content);
+      if (content) processImportText(content, importMode);
     };
     reader.readAsText(file);
     e.target.value = '';
@@ -229,9 +263,19 @@ export function DataManagementPage({
       
       {activeTab === 'EXPORT' && (
         <>
+          <div className="flex justify-center border-b border-green-900/50 p-2 gap-4 shrink-0 bg-zinc-900/30 text-sm">
+            <button 
+              onClick={() => setDownloadMode('CONNECTIONS')}
+              className={`font-bold transition-colors ${downloadMode === 'CONNECTIONS' ? 'text-green-300 underline' : 'text-zinc-500 hover:text-green-400'}`}
+            >Connections</button>
+            <button 
+              onClick={() => setDownloadMode('GENDERS')}
+              className={`font-bold transition-colors ${downloadMode === 'GENDERS' ? 'text-green-300 underline' : 'text-zinc-500 hover:text-green-400'}`}
+            >Genders</button>
+          </div>
           <div className="flex-1 overflow-y-auto p-4">
             <pre className="whitespace-pre-wrap break-words text-green-300 font-mono select-all">
-              {rawText || "No records to export."}
+              {downloadMode === 'CONNECTIONS' ? (rawText || "No records to export.") : (rawGenderText || "No genders to export.")}
             </pre>
           </div>
 
@@ -247,7 +291,7 @@ export function DataManagementPage({
               </>
             ) : (
               <div className="flex justify-between w-full font-bold">
-                <button onClick={handleCopy} className="text-zinc-500 hover:text-green-300 transition-colors">[ Copy Raw ]</button>
+                <button onClick={() => handleCopy(downloadMode)} className="text-zinc-500 hover:text-green-300 transition-colors">[ Copy Raw ]</button>
                 <button onClick={() => setDownloadFormat('txt')} className="text-green-500 hover:text-green-300 transition-colors">[ Download File ]</button>
               </div>
             )}
@@ -257,6 +301,16 @@ export function DataManagementPage({
 
       {activeTab === 'IMPORT' && (
         <div className="flex-1 flex flex-col p-4 gap-6 overflow-y-auto">
+          <div className="flex justify-center border-b border-green-900/50 pb-4 gap-4 shrink-0 text-sm">
+            <button 
+              onClick={() => setImportMode('CONNECTIONS')}
+              className={`font-bold transition-colors ${importMode === 'CONNECTIONS' ? 'text-green-300 underline' : 'text-zinc-500 hover:text-green-400'}`}
+            >Connections</button>
+            <button 
+              onClick={() => setImportMode('GENDERS')}
+              className={`font-bold transition-colors ${importMode === 'GENDERS' ? 'text-green-300 underline' : 'text-zinc-500 hover:text-green-400'}`}
+            >Genders</button>
+          </div>
           <div className="flex flex-col gap-2">
             <label className="text-green-400 font-bold uppercase tracking-widest text-sm">Upload File (.txt, .csv)</label>
             <input 
@@ -272,11 +326,11 @@ export function DataManagementPage({
             <textarea 
               value={importText}
               onChange={(e) => setImportText(e.target.value)}
-              placeholder="personOne personTwo 5&#10;alice bob 8"
+              placeholder={importMode === 'CONNECTIONS' ? "personOne personTwo 5\nalice bob 8" : "alice F\nbob M"}
               className="flex-1 bg-zinc-900 border border-green-900/50 rounded p-4 text-green-300 focus:outline-none focus:border-green-500 resize-none font-mono text-sm"
             />
             <button 
-              onClick={() => processImportText(importText)}
+              onClick={() => processImportText(importText, importMode)}
               disabled={!importText.trim()}
               className="mt-2 bg-green-900/50 text-green-300 font-bold py-3 rounded hover:bg-green-800/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed uppercase tracking-widest"
             >

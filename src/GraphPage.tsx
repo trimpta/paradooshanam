@@ -18,6 +18,19 @@ export function GraphVisualizer({ records }: { records: ConnectionRecord[] }) {
   const [links, setLinks] = useState<Link[]>([]);
   const simRef = useRef<d3.Simulation<Node, Link> | null>(null);
   const [transform, setTransform] = useState<d3.ZoomTransform>(d3.zoomIdentity);
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+
+  const neighborSet = useMemo(() => {
+    if (!selectedNodeId) return new Set<string>();
+    const set = new Set<string>();
+    links.forEach(l => {
+      const srcId = typeof l.source === 'object' ? l.source.id : l.source;
+      const tgtId = typeof l.target === 'object' ? l.target.id : l.target;
+      if (srcId === selectedNodeId) set.add(tgtId);
+      if (tgtId === selectedNodeId) set.add(srcId);
+    });
+    return set;
+  }, [selectedNodeId, links]);
 
   const initialData = useMemo(() => {
     const names = new Set<string>();
@@ -66,9 +79,11 @@ export function GraphVisualizer({ records }: { records: ConnectionRecord[] }) {
   }, []);
 
   const [draggedNode, setDraggedNode] = useState<Node | null>(null);
+  const pointerStartPos = useRef<{x: number, y: number} | null>(null);
 
   const handlePointerDown = (e: React.PointerEvent, node: Node) => {
     e.stopPropagation();
+    pointerStartPos.current = { x: e.clientX, y: e.clientY };
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
     if (simRef.current) simRef.current.alphaTarget(0.3).restart();
     node.fx = node.x;
@@ -92,6 +107,16 @@ export function GraphVisualizer({ records }: { records: ConnectionRecord[] }) {
       if (simRef.current) simRef.current.alphaTarget(0);
       draggedNode.fx = null;
       draggedNode.fy = null;
+      
+      if (pointerStartPos.current) {
+        const dx = e.clientX - pointerStartPos.current.x;
+        const dy = e.clientY - pointerStartPos.current.y;
+        if (Math.abs(dx) < 5 && Math.abs(dy) < 5) {
+          setSelectedNodeId(prev => prev === draggedNode.id ? null : draggedNode.id);
+        }
+      }
+      
+      pointerStartPos.current = null;
       setDraggedNode(null);
       (e.target as HTMLElement).releasePointerCapture(e.pointerId);
     }
@@ -100,6 +125,9 @@ export function GraphVisualizer({ records }: { records: ConnectionRecord[] }) {
   return (
       <div 
         ref={containerRef} 
+        onPointerDown={(e) => {
+          if (!(e.target as Element).closest('.d3-node')) setSelectedNodeId(null);
+        }}
         className="w-full h-full overflow-hidden relative touch-none cursor-grab active:cursor-grabbing"
       >
         <svg className="absolute inset-0 w-full h-full pointer-events-none">
@@ -123,6 +151,9 @@ export function GraphVisualizer({ records }: { records: ConnectionRecord[] }) {
               const src = link.source as Node;
               const tgt = link.target as Node;
               if (src.x == null || src.y == null || tgt.x == null || tgt.y == null) return null;
+              
+              const isFaded = selectedNodeId ? (src.id !== selectedNodeId && tgt.id !== selectedNodeId) : false;
+              
               return (
                 <line 
                   key={i}
@@ -132,7 +163,8 @@ export function GraphVisualizer({ records }: { records: ConnectionRecord[] }) {
                   y2={tgt.y}
                   stroke="#22c55e"
                   strokeWidth={Math.max(0.5, link.score / 2)}
-                  strokeOpacity={0.2 + (link.score / 10) * 0.8}
+                  strokeOpacity={isFaded ? 0.05 : 0.2 + (link.score / 10) * 0.8}
+                  className="transition-opacity duration-300"
                 />
               );
             })}
@@ -142,11 +174,18 @@ export function GraphVisualizer({ records }: { records: ConnectionRecord[] }) {
         <div className="absolute inset-0 pointer-events-none" style={{ transformOrigin: '0 0', transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.k})` }}>
           {nodes.map((node) => {
             if (node.x == null || node.y == null) return null;
+            const isSelected = selectedNodeId === node.id;
+            const isNeighbor = neighborSet.has(node.id);
+            const isFaded = selectedNodeId ? (!isSelected && !isNeighbor) : false;
+            
             return (
               <div 
                 key={node.id}
-                style={{ transform: `translate(${node.x}px, ${node.y}px) translate(-50%, -50%)` }}
-                className="d3-node absolute bg-zinc-950 px-1 font-bold text-xs text-green-400 cursor-grab active:cursor-grabbing pointer-events-auto select-none border border-green-900/30 shadow-[0_0_10px_rgba(0,0,0,0.8)] rounded-sm"
+                style={{ 
+                  transform: `translate(${node.x}px, ${node.y}px) translate(-50%, -50%)`,
+                  opacity: isFaded ? 0.3 : 1
+                }}
+                className={`d3-node absolute px-1 font-bold text-xs cursor-grab active:cursor-grabbing pointer-events-auto select-none border shadow-[0_0_10px_rgba(0,0,0,0.8)] rounded-sm transition-all duration-300 ${isSelected ? 'bg-green-400 text-zinc-950 border-green-400 z-10' : 'bg-zinc-950 text-green-400 border-green-900/30'}`}
                 onPointerDown={(e) => handlePointerDown(e, node)}
                 onPointerMove={handlePointerMove}
                 onPointerUp={handlePointerUp}

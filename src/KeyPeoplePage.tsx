@@ -48,9 +48,10 @@ export function KeyPeoplePage({ records, onClose }: { records: ConnectionRecord[
     };
   }, [records]);
 
-  const renderLeaderboard = (title: string, data: [string, number][] | undefined) => (
+  const renderLeaderboard = (title: string, explanation: string, data: [string, number][] | undefined) => (
     <div className="mb-8">
-      <h3 className="text-green-400 font-bold mb-3 border-b border-green-900/50 pb-1">{title}</h3>
+      <h3 className="text-green-400 font-bold mb-1 border-b border-green-900/50 pb-1">{title}</h3>
+      <p className="text-zinc-500 text-xs mb-3 italic">{explanation}</p>
       {(!data || data.length === 0) ? (
         <div className="text-zinc-500 italic text-sm">Not enough data to calculate.</div>
       ) : (
@@ -81,10 +82,10 @@ export function KeyPeoplePage({ records, onClose }: { records: ConnectionRecord[
           <div className="text-zinc-500 italic">No records to analyze.</div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8">
-            {renderLeaderboard("Most Influential (Eigenvector)", analysis.influential)}
-            {renderLeaderboard("Best Bridges (Betweenness)", analysis.bridges)}
-            {renderLeaderboard("Most Connected (Degree)", analysis.connected)}
-            {renderLeaderboard("Fastest Spread (Closeness)", analysis.speed)}
+            {renderLeaderboard("Most Influential (Eigenvector)", "People connected to other highly connected people.", analysis.influential)}
+            {renderLeaderboard("Best Bridges (Betweenness)", "People who connect different groups together.", analysis.bridges)}
+            {renderLeaderboard("Most Connected (Degree)", "People with the highest number of direct connections.", analysis.connected)}
+            {renderLeaderboard("Fastest Spread (Closeness)", "People who can reach everyone else in the fewest steps.", analysis.speed)}
           </div>
         )}
       </div>

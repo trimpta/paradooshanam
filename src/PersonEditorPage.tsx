@@ -12,6 +12,7 @@ export function PersonEditorPage({ names, genders, onSave, onClose }: PersonEdit
   const [editingName, setEditingName] = useState<string | null>(null);
   const [editInput, setEditInput] = useState('');
   const [editGender, setEditGender] = useState<Gender>('U');
+  const [searchQuery, setSearchQuery] = useState('');
 
   const handleStartEdit = (name: string) => {
     setEditingName(name);
@@ -25,6 +26,8 @@ export function PersonEditorPage({ names, genders, onSave, onClose }: PersonEdit
     setEditingName(null);
   };
 
+  const filteredNames = names.filter(n => n.includes(searchQuery.toLowerCase().replace(/\s/g, '')));
+
   return (
     <div className="absolute inset-0 z-[60] bg-zinc-950 text-green-500 font-mono flex flex-col">
       <div className="p-4 border-b border-green-900/50 flex justify-between items-center shrink-0">
@@ -32,11 +35,21 @@ export function PersonEditorPage({ names, genders, onSave, onClose }: PersonEdit
         <button onClick={onClose} className="text-zinc-500 hover:text-red-400 font-bold transition-colors">[ Close ]</button>
       </div>
 
+      <div className="p-4 border-b border-green-900/50 shrink-0">
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="Search people..."
+          className="w-full bg-zinc-900 border border-green-900/50 focus:border-green-400 outline-none px-3 py-2 text-green-300 rounded"
+        />
+      </div>
+
       <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-2">
-        {names.length === 0 && (
-          <div className="text-zinc-500 italic">No people found.</div>
+        {filteredNames.length === 0 && (
+          <div className="text-zinc-500 italic">{names.length === 0 ? 'No people found.' : 'No matches found.'}</div>
         )}
-        {names.map(name => (
+        {filteredNames.map(name => (
           <div key={name} className="bg-zinc-900/50 border border-green-900/30 rounded p-4">
             {editingName === name ? (
               <div className="flex flex-col gap-4">

@@ -215,6 +215,8 @@ export default function App() {
   const [showPersonEditor, setShowPersonEditor] = useState(false);
   const [activeOutTool, setActiveOutTool] = useState<'GRAPH' | 'PEOPLE' | 'GROUPS' | 'GENDER' | null>(null);
   const [selectedMenuIdx, setSelectedMenuIdx] = useState(0);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showAddForm, setShowAddForm] = useState(false);
 
   const handleUpdatePerson = (oldName: string, newName: string, newGender: Gender) => {
     const trimmedNew = newName.trim();
@@ -299,8 +301,31 @@ export default function App() {
     alert(`Imported ${added} new records. Skipped ${importedRecords.length - added} conflicts/invalid.`);
   };
 
+  const handleImportGenders = (importedGenders: Record<string, Gender>) => {
+    const updatedNames = [...names];
+    const newGenders = { ...genders, ...importedGenders };
+    let added = 0;
+    
+    for (const name of Object.keys(importedGenders)) {
+      if (!updatedNames.includes(name)) {
+        updatedNames.push(name);
+      }
+      added++;
+    }
+    
+    saveToStorage(updatedNames, records, newGenders);
+    alert(`Imported ${added} gender records.`);
+  };
+
   if (showExportPage) {
-    return <DataManagementPage records={records} onClose={() => setShowExportPage(false)} onImport={handleImportData} />;
+    return <DataManagementPage 
+      records={records} 
+      names={names}
+      genders={genders}
+      onClose={() => setShowExportPage(false)} 
+      onImport={handleImportData} 
+      onImportGenders={handleImportGenders}
+    />;
   }
   if (showPersonEditor) {
     return <PersonEditorPage names={names} genders={genders} onSave={handleUpdatePerson} onClose={() => setShowPersonEditor(false)} />;
@@ -349,30 +374,21 @@ export default function App() {
               <div 
                 onClick={() => { setIsMenuOpen(false); setShowPersonEditor(true); }}
                 onPointerEnter={() => setSelectedMenuIdx(1)}
-                className={`flex items-center px-6 py-1 font-bold transition-colors cursor-pointer leading-none ${
-                  selectedMenuIdx === 1 ? 'bg-green-900/50 text-green-300' : 'text-green-700/50'
-                }`}
-              >
-                <span className="w-8 shrink-0">{selectedMenuIdx === 1 ? <span className="animate-pulse">{'>'}</span> : ''}</span>
-                <span className="text-lg tracking-widest uppercase py-1">Person Editor</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+          [ Menu ]
+        </button>
+      </div>
 
-      {/* Edit Popup */}
       {editingRecord && (
-        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center p-6 text-center bg-black/80 backdrop-blur-sm">
-          <div className="bg-zinc-900 border border-green-800 p-6 rounded shadow-xl w-full max-w-sm flex flex-col items-center">
-            <h3 className="text-xl font-bold text-green-400 mb-2">Edit Score</h3>
-            <p className="text-green-300 mb-8 font-bold">
-              {editingRecord.personOne} — {editingRecord.personTwo}
-            </p>
-            <div className="w-full relative overflow-hidden bg-zinc-950 rounded border border-green-900/50 h-16 mb-8">
-              <ScoreSelector score={editingScore} onChange={setEditingScore} />
+        <div className="absolute inset-0 z-[60] bg-zinc-950 flex flex-col items-center justify-center p-6 text-center">
+          <div className="bg-zinc-900 p-6 rounded border border-green-900/50 flex flex-col items-center w-full max-w-sm">
+            <h2 className="text-green-400 font-bold mb-2">Edit Score</h2>
+            <div className="text-zinc-500 font-bold mb-6 truncate w-full">
+              {editingRecord.personOne} <span className="text-green-900">—</span> {editingRecord.personTwo}
             </div>
-            <div className="flex justify-between w-full px-2 mt-2">
+            
+            <NumberScroller value={editingScore} onChange={setEditingScore} />
+            
+            <div className="flex gap-4 mt-8 w-full justify-center">
               <button 
                 onClick={() => setEditingRecord(null)}
                 className="text-zinc-500 hover:text-red-400 font-bold transition-colors"
@@ -393,48 +409,70 @@ export default function App() {
       {mainTab === 'IN' ? (
         <>
           {/* Top: Current Record Input */}
-          <div className="p-4 border-b border-green-900/50 flex flex-col gap-3 shrink-0">
-            <div className="flex items-center gap-2">
-              <span className="w-6 text-zinc-500">1.</span>
-              <input
-                ref={inputOneRef}
-                type="text"
-                value={personOne}
-                onChange={(e) => setPersonOne(e.target.value.toLowerCase().replace(/\s/g, ''))}
-                onFocus={() => handleFocus('ONE')}
-                onKeyDown={(e) => handleInputKeyDown(e, 'ONE')}
-                enterKeyHint="next"
-                className="flex-1 bg-transparent border-b border-green-800 focus:border-green-400 outline-none p-1 text-green-300"
-                placeholder="Person One"
-                disabled={!!conflictRecord}
-              />
+          {showAddForm ? (
+            <div className="p-4 border-b border-green-900/50 flex flex-col gap-3 shrink-0">
+              <div className="flex justify-between items-center mb-1">
+                <span className="text-green-400 font-bold text-sm">ADD CONNECTION</span>
+                <button onClick={() => setShowAddForm(false)} className="text-zinc-500 hover:text-red-400 text-sm font-bold">[ Cancel ]</button>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="w-6 text-zinc-500">1.</span>
+                <input
+                  ref={inputOneRef}
+                  type="text"
+                  value={personOne}
+                  onChange={(e) => setPersonOne(e.target.value.toLowerCase().replace(/\s/g, ''))}
+                  onFocus={() => handleFocus('ONE')}
+                  onKeyDown={(e) => handleInputKeyDown(e, 'ONE')}
+                  enterKeyHint="next"
+                  className="flex-1 bg-transparent border-b border-green-800 focus:border-green-400 outline-none p-1 text-green-300"
+                  placeholder="Person One"
+                  disabled={!!conflictRecord}
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="w-6 text-zinc-500">2.</span>
+                <input
+                  ref={inputTwoRef}
+                  type="text"
+                  value={personTwo}
+                  onChange={(e) => setPersonTwo(e.target.value.toLowerCase().replace(/\s/g, ''))}
+                  onFocus={() => handleFocus('TWO')}
+                  onKeyDown={(e) => handleInputKeyDown(e, 'TWO')}
+                  enterKeyHint="next"
+                  className="flex-1 bg-transparent border-b border-green-800 focus:border-green-400 outline-none p-1 text-green-300"
+                  placeholder="Person Two"
+                  disabled={!!conflictRecord}
+                />
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              <span className="w-6 text-zinc-500">2.</span>
+          ) : (
+            <div className="p-4 border-b border-green-900/50 flex items-center gap-2 shrink-0">
               <input
-                ref={inputTwoRef}
                 type="text"
-                value={personTwo}
-                onChange={(e) => setPersonTwo(e.target.value.toLowerCase().replace(/\s/g, ''))}
-                onFocus={() => handleFocus('TWO')}
-                onKeyDown={(e) => handleInputKeyDown(e, 'TWO')}
-                enterKeyHint="next"
-                className="flex-1 bg-transparent border-b border-green-800 focus:border-green-400 outline-none p-1 text-green-300"
-                placeholder="Person Two"
-                disabled={!!conflictRecord}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search connections..."
+                className="flex-1 bg-zinc-900 border border-green-900/50 focus:border-green-400 outline-none px-3 py-2 text-green-300 rounded"
               />
+              <button 
+                onClick={() => setShowAddForm(true)}
+                className="bg-green-900/30 text-green-400 border border-green-900/50 hover:bg-green-900/50 px-4 py-2 rounded font-bold transition-colors whitespace-nowrap"
+              >
+                + Add
+              </button>
             </div>
-          </div>
+          )}
 
           {/* Middle: Records List OR (Autocomplete / Conflict Popup) */}
           <div className="flex-1 overflow-hidden relative border-b border-green-900/50">
             {!isInputMode ? (
               <div className="h-full overflow-y-auto p-4">
-                {records.length === 0 ? (
-                  <div className="text-zinc-500 italic">No connections saved yet.</div>
+                {filteredRecords.length === 0 ? (
+                  <div className="text-zinc-500 italic">{records.length === 0 ? 'No connections saved yet.' : 'No matches found.'}</div>
                 ) : (
                   <div className="flex flex-col gap-2">
-                    {records.map((r, i) => (
+                    {filteredRecords.map((r, i) => (
                       <RecordCard 
                         key={r.personOne + '-' + r.personTwo}
                         index={i}

@@ -52,12 +52,13 @@ export function GroupDetectionPage({ records, onClose }: { records: ConnectionRe
         
         return {
           members: cluster,
-          leader
+          leader,
+          leaderScore: maxInternalWeight
         };
       });
 
-      // Sort clusters by size descending
-      return groupsWithLeaders.sort((a, b) => b.members.length - a.members.length);
+      // Sort clusters by leader's internal influence score descending
+      return groupsWithLeaders.sort((a, b) => b.leaderScore - a.leaderScore);
     } catch (e) {
       console.warn('Louvain failed', e);
       return [];
