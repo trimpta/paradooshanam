@@ -335,12 +335,6 @@ export default function App() {
   if (activeOutTool === 'GROUPS') return <GroupDetectionPage records={records} onClose={() => setActiveOutTool(null)} />;
   if (activeOutTool === 'GENDER') return <GenderAnalysisPage names={names} genders={genders} records={records} onClose={() => setActiveOutTool(null)} />;
 
-  const filteredRecords = records.filter(r => 
-    searchQuery === '' || 
-    r.personOne.toLowerCase().includes(searchQuery.toLowerCase()) || 
-    r.personTwo.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
   return (
     <div 
       style={{ height: viewportHeight > 0 ? viewportHeight : '100dvh' }}
@@ -380,25 +374,6 @@ export default function App() {
               <div 
                 onClick={() => { setIsMenuOpen(false); setShowPersonEditor(true); }}
                 onPointerEnter={() => setSelectedMenuIdx(1)}
-                className={`flex items-center px-6 py-1 font-bold transition-colors cursor-pointer leading-none ${
-                  selectedMenuIdx === 1 ? 'bg-green-900/50 text-green-300' : 'text-green-700/50'
-                }`}
-              >
-                <span className="w-8 shrink-0">{selectedMenuIdx === 1 ? <span className="animate-pulse">{'>'}</span> : ''}</span>
-                <span className="text-lg tracking-widest uppercase py-1">Person Editor</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Main Header */}
-      <div className="p-4 border-b border-green-900/50 flex justify-between items-center shrink-0">
-        <h1 className="text-xl font-bold uppercase tracking-wider text-green-400">Paradooshanam</h1>
-        <button 
-          onClick={() => setIsMenuOpen(true)}
-          className="text-zinc-500 hover:text-green-400 font-bold transition-colors"
-        >
           [ Menu ]
         </button>
       </div>
@@ -411,9 +386,7 @@ export default function App() {
               {editingRecord.personOne} <span className="text-green-900">—</span> {editingRecord.personTwo}
             </div>
             
-            <div className="w-full relative overflow-hidden bg-zinc-950 rounded border border-green-900/50 h-16 mb-8">
-              <ScoreSelector score={editingScore} onChange={setEditingScore} />
-            </div>
+            <NumberScroller value={editingScore} onChange={setEditingScore} />
             
             <div className="flex gap-4 mt-8 w-full justify-center">
               <button 
