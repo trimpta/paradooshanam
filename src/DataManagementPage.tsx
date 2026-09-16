@@ -185,7 +185,7 @@ export function DataManagementPage({
         
         {/* Graph Preview */}
         <div className="flex-1 relative border-b border-green-900/50 min-h-0">
-          <GraphVisualizer records={mappedRecords} />
+          <GraphVisualizer records={mappedRecords} obfuscated={false} />
         </div>
 
         {/* Controls */}

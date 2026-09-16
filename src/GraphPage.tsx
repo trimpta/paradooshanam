@@ -12,7 +12,7 @@ interface Link extends d3.SimulationLinkDatum<Node> {
   score: number;
 }
 
-export function GraphVisualizer({ records }: { records: ConnectionRecord[] }) {
+export function GraphVisualizer({ records, obfuscated }: { records: ConnectionRecord[], obfuscated: boolean }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [nodes, setNodes] = useState<Node[]>([]);
   const [links, setLinks] = useState<Link[]>([]);
@@ -191,7 +191,7 @@ export function GraphVisualizer({ records }: { records: ConnectionRecord[] }) {
                 onPointerUp={handlePointerUp}
                 onPointerCancel={handlePointerUp}
               >
-                [ {node.id} ]
+                <NodeLabel name={node.id} obfuscated={obfuscated} />
               </div>
             );
           })}
@@ -200,15 +200,148 @@ export function GraphVisualizer({ records }: { records: ConnectionRecord[] }) {
   );
 }
 
+const SYMBOLS = "!@#$%^&*()_+{}|:<>?~-=\\[];',./";
+
+function NodeLabel({ name, obfuscated }: { name: string, obfuscated: boolean }) {
+  const [displayText, setDisplayText] = useState(obfuscated ? '*' : `[ ${name} ]`);
+  
+  useEffect(() => {
+    if (obfuscated && displayText === '*') return;
+    if (!obfuscated && displayText === `[ ${name} ]`) return;
+
+    let timeoutId: any;
+    let intervalId: any;
+
+    const runHide = () => {
+      let step = 0;
+      let currentStr = `[ ${name} ]`;
+      
+      intervalId = setInterval(() => {
+        step++;
+        if (step <= 10) {
+           let arr = currentStr.split('');
+           for (let i = 1; i < arr.length - 1; i++) {
+             if (Math.random() > 0.6) {
+               arr[i] = SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)];
+             }
+           }
+           if (!arr.includes('*')) {
+              arr[Math.floor(Math.random() * (arr.length - 2)) + 1] = '*';
+           }
+           currentStr = arr.join('');
+           setDisplayText(currentStr);
+        } else if (step <= 20) {
+           let arr = currentStr.split('');
+           if (arr.length > 3) {
+             let candidates = [];
+             for(let i=1; i<arr.length-1; i++) {
+                if (arr[i] !== '*') candidates.push(i);
+             }
+             if (candidates.length > 0) {
+                const removeCount = Math.min(candidates.length, Math.random() > 0.5 ? 2 : 1);
+                for (let k = 0; k < removeCount; k++) {
+                   const removeIdx = candidates[Math.floor(Math.random() * candidates.length)];
+                   arr.splice(removeIdx, 1);
+                   candidates = [];
+                   for(let i=1; i<arr.length-1; i++) {
+                      if (arr[i] !== '*') candidates.push(i);
+                   }
+                }
+             } else {
+                arr.splice(1, 1);
+             }
+             currentStr = arr.join('');
+             setDisplayText(currentStr);
+           } else {
+             setDisplayText('[ * ]');
+           }
+        } else {
+           clearInterval(intervalId);
+           setDisplayText('*');
+        }
+      }, 30);
+    };
+
+    const runShow = () => {
+       let step = 0;
+       let currentStr = `[ * ]`;
+       setDisplayText(currentStr);
+       const targetInnerLen = name.length + 2;
+       
+       intervalId = setInterval(() => {
+         step++;
+         if (step <= 10) {
+           let arr = currentStr.split('');
+           if (arr.length - 2 < targetInnerLen) {
+             const addCount = Math.min(targetInnerLen - (arr.length - 2), Math.random() > 0.5 ? 2 : 1);
+             for(let k=0; k<addCount; k++) {
+                const insertIdx = Math.floor(Math.random() * (arr.length - 2)) + 1;
+                arr.splice(insertIdx, 0, SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)]);
+             }
+           }
+           currentStr = arr.join('');
+           setDisplayText(currentStr);
+         } else if (step <= 20) {
+           let arr = currentStr.split('');
+           while (arr.length < targetInnerLen + 2) arr.splice(1, 0, 'X');
+           while (arr.length > targetInnerLen + 2) arr.splice(1, 1);
+           
+           const targetArr = `[ ${name} ]`.split('');
+           for (let i = 1; i < arr.length - 1; i++) {
+             if (arr[i] !== targetArr[i]) {
+                if (Math.random() > 0.5) {
+                   arr[i] = targetArr[i];
+                } else {
+                   arr[i] = SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)];
+                }
+             }
+           }
+           currentStr = arr.join('');
+           setDisplayText(currentStr);
+         } else {
+           clearInterval(intervalId);
+           setDisplayText(`[ ${name} ]`);
+         }
+       }, 30);
+    };
+
+    const delay = Math.random() * 200;
+    timeoutId = setTimeout(() => {
+      if (obfuscated) {
+        runHide();
+      } else {
+        runShow();
+      }
+    }, delay);
+
+    return () => {
+      clearTimeout(timeoutId);
+      clearInterval(intervalId);
+    };
+  }, [obfuscated, name]);
+
+  // Keep it fixed width to prevent layout jumping during scramble if desired?
+  // We'll let it be responsive as the characters change.
+  return <>{displayText}</>;
+}
+
 export function GraphPage({ records, onClose }: { records: ConnectionRecord[], onClose: () => void }) {
+  const [obfuscated, setObfuscated] = useState(false);
+
   return (
     <div className="absolute inset-0 bg-zinc-950 text-green-500 font-mono flex flex-col z-50">
       <div className="p-4 border-b border-green-900/50 flex justify-between items-center shrink-0">
-        <h2 className="text-xl font-bold uppercase tracking-wider text-green-400">Graph</h2>
-        <button onClick={onClose} className="text-zinc-500 hover:text-red-400 font-bold transition-colors">[ Close ]</button>
+        <h2 className="text-xl font-bold uppercase tracking-wider text-green-400 w-24">Graph</h2>
+        <button 
+          onClick={() => setObfuscated(!obfuscated)} 
+          className="text-green-400 hover:text-green-300 font-bold tracking-widest px-4 py-1 border border-green-900/50 rounded bg-green-900/20"
+        >
+          {obfuscated ? '*' : '****'}
+        </button>
+        <button onClick={onClose} className="text-zinc-500 hover:text-red-400 font-bold transition-colors w-24 text-right">[ Close ]</button>
       </div>
       <div className="flex-1 overflow-hidden relative">
-        <GraphVisualizer records={records} />
+        <GraphVisualizer records={records} obfuscated={obfuscated} />
       </div>
     </div>
   );
