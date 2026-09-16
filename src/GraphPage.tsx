@@ -204,11 +204,14 @@ export function GraphVisualizer({ records, obfuscated }: { records: ConnectionRe
 const SYMBOLS = "!@#$%^&*()_+{}|:<>?~-=\\[];',./";
 
 function NodeLabel({ name, obfuscated }: { name: string, obfuscated: boolean }) {
-  const [displayText, setDisplayText] = useState(obfuscated ? '*' : `[ ${name} ]`);
+  const spanRef = useRef<HTMLSpanElement>(null);
   
   useEffect(() => {
-    if (obfuscated && displayText === '*') return;
-    if (!obfuscated && displayText === `[ ${name} ]`) return;
+    const el = spanRef.current;
+    if (!el) return;
+
+    if (obfuscated && el.textContent === '*') return;
+    if (!obfuscated && el.textContent === `[ ${name} ]`) return;
 
     let timeoutId: any;
     let intervalId: any;
@@ -219,6 +222,8 @@ function NodeLabel({ name, obfuscated }: { name: string, obfuscated: boolean }) 
       
       intervalId = setInterval(() => {
         step++;
+        if (!spanRef.current) { clearInterval(intervalId); return; }
+
         if (step <= 10) {
            let arr = currentStr.split('');
            for (let i = 1; i < arr.length - 1; i++) {
@@ -230,7 +235,7 @@ function NodeLabel({ name, obfuscated }: { name: string, obfuscated: boolean }) 
               arr[Math.floor(Math.random() * (arr.length - 2)) + 1] = '*';
            }
            currentStr = arr.join('');
-           setDisplayText(currentStr);
+           spanRef.current.textContent = currentStr;
         } else if (step <= 20) {
            let arr = currentStr.split('');
            if (arr.length > 3) {
@@ -252,13 +257,14 @@ function NodeLabel({ name, obfuscated }: { name: string, obfuscated: boolean }) 
                 arr.splice(1, 1);
              }
              currentStr = arr.join('');
-             setDisplayText(currentStr);
+             spanRef.current.textContent = currentStr;
            } else {
-             setDisplayText('[ * ]');
+             currentStr = '[ * ]';
+             spanRef.current.textContent = currentStr;
            }
         } else {
            clearInterval(intervalId);
-           setDisplayText('*');
+           spanRef.current.textContent = '*';
         }
       }, 30);
     };
@@ -266,11 +272,13 @@ function NodeLabel({ name, obfuscated }: { name: string, obfuscated: boolean }) 
     const runShow = () => {
        let step = 0;
        let currentStr = `[ * ]`;
-       setDisplayText(currentStr);
+       if (spanRef.current) spanRef.current.textContent = currentStr;
        const targetInnerLen = name.length + 2;
        
        intervalId = setInterval(() => {
          step++;
+         if (!spanRef.current) { clearInterval(intervalId); return; }
+
          if (step <= 10) {
            let arr = currentStr.split('');
            if (arr.length - 2 < targetInnerLen) {
@@ -281,7 +289,7 @@ function NodeLabel({ name, obfuscated }: { name: string, obfuscated: boolean }) 
              }
            }
            currentStr = arr.join('');
-           setDisplayText(currentStr);
+           spanRef.current.textContent = currentStr;
          } else if (step <= 20) {
            let arr = currentStr.split('');
            while (arr.length < targetInnerLen + 2) arr.splice(1, 0, 'X');
@@ -298,10 +306,10 @@ function NodeLabel({ name, obfuscated }: { name: string, obfuscated: boolean }) 
              }
            }
            currentStr = arr.join('');
-           setDisplayText(currentStr);
+           spanRef.current.textContent = currentStr;
          } else {
            clearInterval(intervalId);
-           setDisplayText(`[ ${name} ]`);
+           spanRef.current.textContent = `[ ${name} ]`;
          }
        }, 30);
     };
@@ -321,9 +329,7 @@ function NodeLabel({ name, obfuscated }: { name: string, obfuscated: boolean }) 
     };
   }, [obfuscated, name]);
 
-  // Keep it fixed width to prevent layout jumping during scramble if desired?
-  // We'll let it be responsive as the characters change.
-  return <>{displayText}</>;
+  return <span ref={spanRef}>{obfuscated ? '*' : `[ ${name} ]`}</span>;
 }
 
 export function GraphPage({ records, onClose }: { records: ConnectionRecord[], onClose: () => void }) {
