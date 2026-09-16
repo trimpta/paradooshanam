@@ -177,7 +177,8 @@ export function GraphVisualizer({ records, obfuscated }: { records: ConnectionRe
             const isSelected = selectedNodeId === node.id;
             const isNeighbor = neighborSet.has(node.id);
             const isFaded = selectedNodeId ? (!isSelected && !isNeighbor) : false;
-            
+            const shouldObfuscate = obfuscated && !(isSelected || isNeighbor);
+
             return (
               <div 
                 key={node.id}
@@ -191,7 +192,7 @@ export function GraphVisualizer({ records, obfuscated }: { records: ConnectionRe
                 onPointerUp={handlePointerUp}
                 onPointerCancel={handlePointerUp}
               >
-                <NodeLabel name={node.id} obfuscated={obfuscated} />
+                <NodeLabel name={node.id} obfuscated={shouldObfuscate} />
               </div>
             );
           })}
