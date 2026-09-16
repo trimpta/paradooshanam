@@ -154,7 +154,8 @@ export default function App() {
       inputTwoRef.current?.focus();
     } else {
       setPersonTwo(name);
-      inputTwoRef.current?.blur();
+      // Keep focus on inputTwo so keyboard stays open
+      inputTwoRef.current?.focus();
     }
   };
 
@@ -436,7 +437,7 @@ export default function App() {
       {mainTab === 'IN' ? (
         <>
           {/* Top: Current Record Input */}
-          {showAddForm ? (
+          {showAddForm && (
             <div className="p-4 border-b border-green-900/50 flex flex-col gap-3 shrink-0">
               <div className="flex justify-between items-center mb-1">
                 <span className="text-green-400 font-bold text-sm">ADD CONNECTION</span>
@@ -472,29 +473,37 @@ export default function App() {
                   disabled={!!conflictRecord}
                 />
               </div>
-            </div>
-          ) : (
-            <div className="p-4 border-b border-green-900/50 flex items-center gap-2 shrink-0">
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search connections..."
-                className="flex-1 bg-zinc-900 border border-green-900/50 focus:border-green-400 outline-none px-3 py-2 text-green-300 rounded"
-              />
-              <button 
-                onClick={() => setShowAddForm(true)}
-                className="bg-green-900/30 text-green-400 border border-green-900/50 hover:bg-green-900/50 px-4 py-2 rounded font-bold transition-colors whitespace-nowrap"
-              >
-                + Add
-              </button>
+
+              {!conflictRecord && (
+                <>
+                  <div className="w-full relative overflow-hidden bg-zinc-950 rounded border border-green-900/50 h-16 mt-2 mb-2">
+                    <ScoreSelector score={score} onChange={setScore} />
+                  </div>
+                  <button 
+                    onClick={handleSave}
+                    disabled={!personOne.trim() || !personTwo.trim()}
+                    className="w-full bg-green-900/30 text-green-400 border border-green-900/50 py-3 font-bold uppercase tracking-widest disabled:opacity-50"
+                  >
+                    [ Save ]
+                  </button>
+                </>
+              )}
             </div>
           )}
 
           {/* Middle: Records List OR (Autocomplete / Conflict Popup) */}
           <div className="flex-1 overflow-hidden relative border-b border-green-900/50">
-            {!isInputMode ? (
-              <div className="h-full overflow-y-auto p-4">
+            {!showAddForm ? (
+              <div className="h-full overflow-y-auto p-4 pb-24">
+                <div className="mb-4">
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search connections..."
+                    className="w-full bg-zinc-900 border border-green-900/50 focus:border-green-400 outline-none px-4 py-3 text-green-300 rounded font-bold"
+                  />
+                </div>
                 {filteredRecords.length === 0 ? (
                   <div className="text-zinc-500 italic">{records.length === 0 ? 'No connections saved yet.' : 'No matches found.'}</div>
                 ) : (
@@ -543,6 +552,18 @@ export default function App() {
               />
             )}
           </div>
+          
+          {/* FAB for Add Connection */}
+          {!showAddForm && !isInputMode && (
+            <button
+              onClick={() => setShowAddForm(true)}
+              className="absolute bottom-20 right-6 w-14 h-14 bg-green-900 border-2 border-green-500 rounded-full flex items-center justify-center text-green-300 shadow-[0_0_15px_rgba(34,197,94,0.3)] hover:scale-105 active:scale-95 transition-transform z-40"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+              </svg>
+            </button>
+          )}
         </>
       ) : (
         <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4 border-b border-green-900/50">
