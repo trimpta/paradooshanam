@@ -117,7 +117,7 @@ export default function App({ graphId, onBack, onEnterOnline }: { graphId?: stri
   const inputTwoRef = useRef<HTMLInputElement>(null);
 
   // Sync map for Name -> UUID
-  const [nodeMap, setNodeMap] = useState<Record<string, string>>({});
+  // nodeMap removed to fix TS6133
 
   useEffect(() => {
     async function loadData() {
@@ -163,7 +163,7 @@ export default function App({ graphId, onBack, onEnterOnline }: { graphId?: stri
         });
       }
       
-      setNodeMap(newMap);
+      // setNodeMap(newMap);
       setNames(newNames);
       setGenders(newGenders);
       setRecords(newRecords);
@@ -561,6 +561,15 @@ export default function App({ graphId, onBack, onEnterOnline }: { graphId?: stri
                 >
                   <span className="w-8 shrink-0">{selectedMenuIdx === 2 ? <span className="animate-pulse">{'>'}</span> : ''}</span>
                   <span className="text-lg tracking-widest uppercase py-1 text-blue-400 border border-blue-900/50 rounded px-2 bg-blue-900/20">Online Mode</span>
+                </div>
+              )}
+              {graphId && onBack && (
+                <div 
+                  onClick={() => { setIsMenuOpen(false); onBack(); }}
+                  className="flex items-center px-6 py-1 font-bold transition-colors cursor-pointer leading-none mt-4 text-red-700/50 hover:text-red-400"
+                >
+                  <span className="w-8 shrink-0"></span>
+                  <span className="text-lg tracking-widest uppercase py-1 border border-red-900/50 rounded px-2 bg-red-900/20">Back to Dashboard</span>
                 </div>
               )}
             </div>
