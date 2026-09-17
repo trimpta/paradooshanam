@@ -961,13 +961,17 @@ function RecordCard({
   return (
     <div className="relative rounded touch-pan-y">
       {/* Background Indicators */}
-      <div className="absolute inset-0 flex items-center justify-between px-4 rounded overflow-hidden">
-        <span className={`font-bold transition-opacity duration-200 ${translateX > 40 ? 'opacity-100 text-green-400' : 'opacity-0'}`}>
-          EDIT
-        </span>
-        <span className={`font-bold transition-opacity duration-200 ${translateX < -40 ? 'opacity-100 text-red-500' : 'opacity-0'}`}>
-          DELETE
-        </span>
+      <div className="absolute inset-0 flex items-center justify-between rounded overflow-hidden">
+        <div className={`absolute inset-y-0 left-0 flex items-center px-4 w-1/2 transition-colors duration-200 ${translateX > 40 ? 'bg-green-500' : 'bg-transparent'}`}>
+          <span className={`font-bold transition-opacity duration-200 ${translateX > 40 ? 'opacity-100 text-zinc-900' : 'opacity-0'}`}>
+            EDIT
+          </span>
+        </div>
+        <div className={`absolute inset-y-0 right-0 flex items-center justify-end px-4 w-1/2 transition-colors duration-200 ${translateX < -40 ? 'bg-red-500' : 'bg-transparent'}`}>
+          <span className={`font-bold transition-opacity duration-200 ${translateX < -40 ? 'opacity-100 text-zinc-900' : 'opacity-0'}`}>
+            DELETE
+          </span>
+        </div>
       </div>
       
       {/* Draggable Card Surface */}
