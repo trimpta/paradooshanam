@@ -218,7 +218,12 @@ export function GraphVisualizer({ records, obfuscated, settings, traversalSequen
     const names = new Set<string>();
     filteredRecords.forEach(r => { names.add(r.personOne); names.add(r.personTwo); });
     const nodesData = Array.from(names).map(name => ({ id: name }));
-    const linksData = filteredRecords.map(r => ({ source: r.personOne, target: r.personTwo, score: r.score, relationshipStatus: r.relationshipStatus }));
+    const linksData = filteredRecords.map(r => ({ source: r.personOne, target: r.personTwo, score: r.score, relationshipStatus: r.relationshipStatus }))
+      .sort((a, b) => {
+        const aHasStatus = a.relationshipStatus && a.relationshipStatus !== 'None' ? 1 : 0;
+        const bHasStatus = b.relationshipStatus && b.relationshipStatus !== 'None' ? 1 : 0;
+        return aHasStatus - bHasStatus;
+      });
     return { nodesData, linksData };
   }, [records, settings.minScoreThreshold]);
 
