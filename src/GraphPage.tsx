@@ -175,9 +175,11 @@ export interface GraphSettings {
   autoZoom: boolean;
   chargeStrength: number;
   alphaDecay: number;
+  traversalMode: 'none' | 'sequence' | 'random';
+  traversalSpeed: number;
 }
 
-export function GraphVisualizer({ records, obfuscated, settings }: { records: ConnectionRecord[], obfuscated: boolean, settings: GraphSettings }) {
+export function GraphVisualizer({ records, obfuscated, settings, traversalSequence, setTraversalMode }: { records: ConnectionRecord[], obfuscated: boolean, settings: GraphSettings, traversalSequence?: string[], setTraversalMode?: (mode: 'none'|'sequence'|'random') => void }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const simRef = useRef<d3.Simulation<Node, Link> | null>(null);
   const zoomRef = useRef<d3.ZoomBehavior<HTMLDivElement, unknown> | null>(null);
@@ -292,13 +294,20 @@ export function GraphVisualizer({ records, obfuscated, settings }: { records: Co
         return !e.target.closest('.d3-node');
       })
       .on("zoom", (e) => {
+        // If zoom triggered by user mouse/wheel/touch, cancel traversal
+        if (e.sourceEvent && setTraversalMode && settings.traversalMode !== 'none') {
+          setTraversalMode('none');
+        }
+
         transformRef.current = e.transform;
         const t = e.transform;
+        
+        // direct DOM manipulation for transform
         if (svgGroupRef.current) {
           svgGroupRef.current.setAttribute('transform', `translate(${t.x},${t.y}) scale(${t.k})`);
         }
         if (nodeContainerRef.current) {
-          nodeContainerRef.current.style.transform = `translate(${t.x}px, ${t.y}px) scale(${t.k})`;
+          nodeContainerRef.current.style.transform = `translate3d(${t.x}px, ${t.y}px, 0) scale(${t.k})`;
         }
         if (patternRef.current) {
           patternRef.current.setAttribute('patternTransform', `translate(${t.x}, ${t.y}) scale(${t.k})`);
@@ -309,7 +318,7 @@ export function GraphVisualizer({ records, obfuscated, settings }: { records: Co
     d3.select(containerRef.current)
       .call(zoom)
       .on("dblclick.zoom", null);
-  }, []);
+  }, [settings.traversalMode, setTraversalMode]);
 
   // --- Auto-frame selected node and neighbors ---
   useEffect(() => {
@@ -387,6 +396,115 @@ export function GraphVisualizer({ records, obfuscated, settings }: { records: Co
       simRef.current.stop();
     }
   }, [settings.physicsEnabled]);
+
+  // --- Traversal Logic ---
+  const traversalQueueRef = useRef<string[]>([]);
+  const traversalSeqIndexRef = useRef(0);
+
+  useEffect(() => {
+    if (settings.traversalMode === 'none') {
+      traversalQueueRef.current = [];
+      return;
+    }
+
+    const adj = new Map<string, string[]>();
+    initialData.linksData.forEach(l => {
+      const u = l.source;
+      const v = l.target;
+      if (!adj.has(u)) adj.set(u, []);
+      if (!adj.has(v)) adj.set(v, []);
+      adj.get(u)!.push(v);
+      adj.get(v)!.push(u);
+    });
+
+    const getShortestPath = (start: string, end: string): string[] => {
+      if (start === end) return [start];
+      const q = [start];
+      const visited = new Set([start]);
+      const parent = new Map<string, string>();
+      while (q.length > 0) {
+        const curr = q.shift()!;
+        if (curr === end) break;
+        for (const nbr of adj.get(curr) || []) {
+          if (!visited.has(nbr)) {
+            visited.add(nbr);
+            parent.set(nbr, curr);
+            q.push(nbr);
+          }
+        }
+      }
+      const path = [];
+      let step: string | undefined = end;
+      while (step) {
+        path.unshift(step);
+        step = parent.get(step);
+      }
+      return path.length > 0 && path[0] === start ? path : [];
+    };
+
+    let timeoutId: any;
+
+    const runStep = () => {
+      setSelectedNodeId(prev => {
+        let nextNode = prev;
+
+        if (settings.traversalMode === 'random') {
+          const curr = prev || initialData.nodesData[Math.floor(Math.random() * initialData.nodesData.length)]?.id;
+          const nbrs = adj.get(curr) || [];
+          if (nbrs.length > 0) {
+            nextNode = nbrs[Math.floor(Math.random() * nbrs.length)];
+          } else {
+            nextNode = initialData.nodesData[Math.floor(Math.random() * initialData.nodesData.length)]?.id;
+          }
+        } else if (settings.traversalMode === 'sequence' && traversalSequence && traversalSequence.length > 0) {
+          if (traversalQueueRef.current.length > 0) {
+            nextNode = traversalQueueRef.current.shift()!;
+          } else {
+            const currentIdx = traversalSeqIndexRef.current % traversalSequence.length;
+            const nextIdx = (traversalSeqIndexRef.current + 1) % traversalSequence.length;
+            const startNode = prev || traversalSequence[currentIdx];
+            const endNode = traversalSequence[nextIdx];
+            
+            const path = getShortestPath(startNode, endNode);
+            
+            if (path.length > 0) {
+              if (path[0] === startNode) path.shift();
+              traversalQueueRef.current = path;
+              if (traversalQueueRef.current.length > 0) {
+                nextNode = traversalQueueRef.current.shift()!;
+              } else {
+                nextNode = endNode;
+              }
+            } else {
+               nextNode = endNode;
+            }
+            traversalSeqIndexRef.current++;
+          }
+        }
+
+        return nextNode;
+      });
+
+      timeoutId = setTimeout(runStep, settings.traversalSpeed);
+    };
+
+    if (settings.traversalMode === 'sequence' && (!traversalSequence || traversalSequence.length === 0)) {
+       setTraversalMode?.('none');
+       return;
+    }
+
+    if (settings.traversalMode === 'sequence') {
+      traversalSeqIndexRef.current = 0;
+      traversalQueueRef.current = [];
+      if (traversalSequence && traversalSequence.length > 0) {
+         setSelectedNodeId(traversalSequence[0]);
+      }
+    }
+
+    timeoutId = setTimeout(runStep, settings.traversalSpeed);
+
+    return () => clearTimeout(timeoutId);
+  }, [settings.traversalMode, settings.traversalSpeed, traversalSequence, initialData, setTraversalMode]);
 
   // --- Drag handling: refs instead of state to avoid re-renders during drag ---
   const draggedNodeRef = useRef<Node | null>(null);
@@ -527,6 +645,8 @@ function NodeLabel({ name, obfuscated, index, totalNodes }: { name: string, obfu
 
 import { CardHeader } from './CardHeader';
 
+import { TraversalMenu } from './TraversalMenu';
+
 export function GraphPage({ records, onClose }: { records: ConnectionRecord[], onClose: () => void }) {
   const [obfuscated, setObfuscated] = useState(false);
   const toggleRef = useRef<HTMLButtonElement>(null);
@@ -536,8 +656,13 @@ export function GraphPage({ records, onClose }: { records: ConnectionRecord[], o
     baseDistance: 20,
     autoZoom: true,
     chargeStrength: -200,
-    alphaDecay: 0.05
+    alphaDecay: 0.05,
+    traversalMode: 'none',
+    traversalSpeed: 1000
   });
+
+  const [traversalSequence, setTraversalSequence] = useState<string[]>([]);
+  const uniqueNodes = useMemo(() => Array.from(new Set(records.flatMap(r => [r.personOne, r.personTwo]))), [records]);
 
   const updateSetting = (key: keyof GraphSettings, value: any) => {
     setSettings(s => ({ ...s, [key]: value }));
@@ -556,6 +681,21 @@ export function GraphPage({ records, onClose }: { records: ConnectionRecord[], o
   }, [obfuscated]);
 
   const menuOptions = [
+    {
+      id: 'traversal',
+      type: 'custom' as const,
+      render: () => (
+        <TraversalMenu
+          validNodes={uniqueNodes}
+          mode={settings.traversalMode}
+          setMode={(m) => updateSetting('traversalMode', m)}
+          sequence={traversalSequence}
+          setSequence={setTraversalSequence}
+          speed={settings.traversalSpeed}
+          setSpeed={(s) => updateSetting('traversalSpeed', s)}
+        />
+      )
+    },
     {
       id: 'physics',
       label: 'Physics Simulation',
@@ -621,7 +761,13 @@ export function GraphPage({ records, onClose }: { records: ConnectionRecord[], o
         } 
       />
       <div className="flex-1 overflow-hidden relative">
-        <GraphVisualizer records={records} obfuscated={obfuscated} settings={settings} />
+        <GraphVisualizer 
+          records={records} 
+          obfuscated={obfuscated} 
+          settings={settings} 
+          traversalSequence={traversalSequence} 
+          setTraversalMode={(m) => updateSetting('traversalMode', m)} 
+        />
       </div>
     </div>
   );

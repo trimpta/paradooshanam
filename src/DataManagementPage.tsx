@@ -188,7 +188,9 @@ export function DataManagementPage({
             baseDistance: 20,
             autoZoom: false,
             chargeStrength: -200,
-            alphaDecay: 0.05
+            alphaDecay: 0.05,
+            traversalMode: 'none',
+            traversalSpeed: 1000
           }} />
         </div>
 
