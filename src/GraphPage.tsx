@@ -338,25 +338,56 @@ export function GraphVisualizer({ records, obfuscated, settings, traversalSequen
       .on("dblclick.zoom", null);
   }, [settings.traversalMode, setTraversalMode]);
 
+  const isInitialZoom = useRef(true);
   // --- Auto-frame selected node and neighbors ---
   useEffect(() => {
-    if (!settings.autoZoom || !selectedNodeId || !containerRef.current || !zoomRef.current) return;
+    if (!settings.autoZoom || !containerRef.current || !zoomRef.current) return;
+    if (isInitialZoom.current && !selectedNodeId) {
+      isInitialZoom.current = false;
+      return;
+    }
+    isInitialZoom.current = false;
 
     const currentNodes = nodesRef.current;
-    const targetNode = currentNodes.find(n => n.id === selectedNodeId);
-    if (!targetNode || targetNode.x == null || targetNode.y == null) return;
+    if (currentNodes.length === 0) return;
 
-    const coords = [{ x: targetNode.x, y: targetNode.y }];
-    currentNodes.forEach(n => {
-      if (neighborSet.has(n.id) && n.x != null && n.y != null) {
-        coords.push({ x: n.x, y: n.y });
+    // If a specific node is selected, frame it and its neighbors
+    // Otherwise, frame the entire graph
+    const nodesToFrame: Node[] = [];
+    if (selectedNodeId) {
+      currentNodes.forEach(n => {
+        if (n.id === selectedNodeId || neighborSet.has(n.id)) {
+          nodesToFrame.push(n);
+        }
+      });
+    } else {
+      // Small delay before framing all to let physics settle if just mounted
+      // But actually, we only want to frame if we just EXITED a selection.
+      // We can just frame all nodes immediately.
+      nodesToFrame.push(...currentNodes);
+    }
+
+    if (nodesToFrame.length === 0) return;
+
+    let minX = Infinity;
+    let maxX = -Infinity;
+    let minY = Infinity;
+    let maxY = -Infinity;
+
+    nodesToFrame.forEach(n => {
+      if (n.x != null && n.y != null) {
+        const el = nodeElsRef.current.get(n.id);
+        const w = el ? el.offsetWidth : 100;
+        const h = el ? el.offsetHeight : 30;
+        
+        minX = Math.min(minX, n.x - w / 2);
+        maxX = Math.max(maxX, n.x + w / 2);
+        minY = Math.min(minY, n.y - h / 2);
+        maxY = Math.max(maxY, n.y + h / 2);
       }
     });
 
-    const minX = Math.min(...coords.map(c => c.x));
-    const maxX = Math.max(...coords.map(c => c.x));
-    const minY = Math.min(...coords.map(c => c.y));
-    const maxY = Math.max(...coords.map(c => c.y));
+    if (minX === Infinity) return;
 
     const cx = (minX + maxX) / 2;
     const cy = (minY + maxY) / 2;
@@ -365,17 +396,19 @@ export function GraphVisualizer({ records, obfuscated, settings, traversalSequen
 
     const width = containerRef.current.clientWidth;
     const height = containerRef.current.clientHeight;
-    const padding = 100;
+    // Add extra padding to ensure extreme end nodes aren't flush with edges
+    const padding = 120; // 60px padding on each side
 
     let scale;
     if (w === 0 && h === 0) {
-      scale = 2;
+      scale = 1.5;
     } else {
       scale = Math.min(
         (width - padding) / Math.max(1, w),
         (height - padding) / Math.max(1, h)
       );
-      scale = Math.max(0.1, Math.min(scale, 4));
+      // Let it zoom out slightly more (0.05) if the graph is huge
+      scale = Math.max(0.05, Math.min(scale, 2.5));
     }
 
     const t = d3.zoomIdentity
