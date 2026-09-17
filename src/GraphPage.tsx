@@ -530,14 +530,6 @@ export function GraphPage({ records, onClose }: { records: ConnectionRecord[], o
 
   const menuOptions = [
     {
-      id: 'obfuscated',
-      label: 'Obfuscate Names',
-      type: 'toggle' as const,
-      value: obfuscated,
-      onChange: (v: boolean) => setObfuscated(v),
-      info: 'Scrambles all names into random symbols. Select a node to temporarily reveal it.'
-    },
-    {
       id: 'physics',
       label: 'Physics Simulation',
       type: 'toggle' as const,
@@ -587,7 +579,14 @@ export function GraphPage({ records, onClose }: { records: ConnectionRecord[], o
 
   return (
     <div className="absolute inset-0 bg-zinc-950 text-green-500 font-mono flex flex-col z-50">
-      <CardHeader title="Graph" onClose={onClose} menuOptions={menuOptions} />
+      <CardHeader title="Graph" onClose={onClose} menuOptions={menuOptions}>
+        <button
+          onClick={() => setObfuscated(!obfuscated)}
+          className="text-green-400 hover:text-green-300 font-bold tracking-widest px-4 py-1 border border-green-900/50 rounded bg-green-900/20"
+        >
+          {obfuscated ? '*' : '****'}
+        </button>
+      </CardHeader>
       <div className="flex-1 overflow-hidden relative">
         <GraphVisualizer records={records} obfuscated={obfuscated} settings={settings} />
       </div>
