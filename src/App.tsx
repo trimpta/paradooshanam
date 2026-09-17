@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef, useMemo, KeyboardEvent, TouchEvent } from 'react';
 import { supabase } from './lib/supabase';
-import { Menu } from 'lucide-react';
 import { GraphPage } from './GraphPage';
 import { KeyPeoplePage } from './KeyPeoplePage';
 import { GroupDetectionPage } from './GroupDetectionPage';
@@ -112,6 +111,16 @@ export default function App({ graphId, onBack, onEnterOnline }: { graphId?: stri
   
   // Now explicitly bound to the robust keyboard state
   const isInputMode = isKeyboardOpen;
+  useEffect(() => {
+    if (!isKeyboardOpen) {
+      setPersonOne('');
+      setPersonTwo('');
+      setScore(5);
+      setRelationshipStatus('None');
+      inputOneRef.current?.blur();
+      inputTwoRef.current?.blur();
+    }
+  }, [isKeyboardOpen]);
 
   const inputOneRef = useRef<HTMLInputElement>(null);
   const inputTwoRef = useRef<HTMLInputElement>(null);
@@ -368,9 +377,15 @@ export default function App({ graphId, onBack, onEnterOnline }: { graphId?: stri
     clearFormAndFocus();
   };
 
-  const handleCancelConflict = () => {
-    clearFormAndFocus();
+  const handleOK = () => {
+    if (conflictRecord) {
+      handleUpdate();
+    } else {
+      handleSave();
+    }
   };
+
+  
 
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [showExportPage, setShowExportPage] = useState(false);
@@ -378,7 +393,7 @@ export default function App({ graphId, onBack, onEnterOnline }: { graphId?: stri
   const [activeOutTool, setActiveOutTool] = useState<'GRAPH' | 'PEOPLE' | 'GROUPS' | 'GENDER' | 'RELATIONSHIPS' | null>(null);
   const [selectedMenuIdx, setSelectedMenuIdx] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
-  const [showAddForm, setShowAddForm] = useState(false);
+  
 
   const handleUpdatePerson = (oldName: string, newName: string, newGender: Gender) => {
     const trimmedNew = newName.trim();
@@ -577,16 +592,7 @@ export default function App({ graphId, onBack, onEnterOnline }: { graphId?: stri
         </div>
       )}
 
-      {/* Main Header */}
-      <div className="p-4 border-b border-green-900/50 flex justify-between items-center shrink-0">
-        <h1 className="text-xl font-bold uppercase tracking-wider text-green-400">Paradooshanam</h1>
-        <button 
-          onClick={() => setIsMenuOpen(true)}
-          className="text-zinc-500 hover:text-green-400 font-bold transition-colors"
-        >
-          [ Menu ]
-        </button>
-      </div>
+      
 
       {editingRecord && (
         <div className="absolute inset-0 z-[60] bg-zinc-950 flex flex-col items-center justify-center p-6 text-center">
@@ -623,104 +629,73 @@ export default function App({ graphId, onBack, onEnterOnline }: { graphId?: stri
       {mainTab === 'IN' ? (
         <>
           {/* Top: Current Record Input */}
-          {showAddForm && (
-            <div className="p-4 border-b border-green-900/50 flex flex-col gap-3 shrink-0">
-              <div className="flex justify-between items-center mb-1">
-                <span className="text-green-400 font-bold text-sm">ADD CONNECTION</span>
-                <button onClick={() => setShowAddForm(false)} className="text-zinc-500 hover:text-red-400 text-sm font-bold">[ Cancel ]</button>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="w-6 text-zinc-500">1.</span>
-                <input
-                  ref={inputOneRef}
-                  type="text"
-                  value={personOne}
-                  onChange={(e) => setPersonOne(e.target.value.toLowerCase().replace(/\s/g, ''))}
-                  onFocus={() => handleFocus('ONE')}
-                  onKeyDown={(e) => handleInputKeyDown(e, 'ONE')}
-                  enterKeyHint="next"
-                  className="flex-1 bg-transparent border-b border-green-800 focus:border-green-400 outline-none p-1 text-green-300"
-                  placeholder="Person One"
-                  disabled={!!conflictRecord}
-                />
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="w-6 text-zinc-500">2.</span>
-                <input
-                  ref={inputTwoRef}
-                  type="text"
-                  value={personTwo}
-                  onChange={(e) => setPersonTwo(e.target.value.toLowerCase().replace(/\s/g, ''))}
-                  onFocus={() => handleFocus('TWO')}
-                  onKeyDown={(e) => handleInputKeyDown(e, 'TWO')}
-                  enterKeyHint="next"
-                  className="flex-1 bg-transparent border-b border-green-800 focus:border-green-400 outline-none p-1 text-green-300"
-                  placeholder="Person Two"
-                  disabled={!!conflictRecord}
-                />
-              </div>
-
-              {conflictRecord && (
-                <div className="text-zinc-500 text-xs mt-1">
-                  Conflict: existing score is <span className="text-green-400 font-bold">{conflictRecord.score}</span>
-                </div>
-              )}
+          <div className="p-4 border-b border-green-900/50 flex flex-col gap-3 shrink-0">
+            <div className="flex items-center gap-2">
+              <span className="w-6 text-zinc-500">1.</span>
+              <input
+                ref={inputOneRef}
+                type="text"
+                value={personOne}
+                onChange={(e) => setPersonOne(e.target.value.toLowerCase().replace(/\s/g, ''))}
+                onFocus={() => handleFocus('ONE')}
+                onKeyDown={(e) => handleInputKeyDown(e, 'ONE')}
+                enterKeyHint="next"
+                className="flex-1 bg-transparent border-b border-green-800 focus:border-green-400 outline-none p-1 text-green-300"
+                placeholder="Person One"
+                disabled={!!conflictRecord}
+              />
             </div>
-          )}
+            <div className="flex items-center gap-2">
+              <span className="w-6 text-zinc-500">2.</span>
+              <input
+                ref={inputTwoRef}
+                type="text"
+                value={personTwo}
+                onChange={(e) => setPersonTwo(e.target.value.toLowerCase().replace(/\s/g, ''))}
+                onFocus={() => handleFocus('TWO')}
+                onKeyDown={(e) => handleInputKeyDown(e, 'TWO')}
+                enterKeyHint="next"
+                className="flex-1 bg-transparent border-b border-green-800 focus:border-green-400 outline-none p-1 text-green-300"
+                placeholder="Person Two"
+                disabled={!!conflictRecord}
+              />
+            </div>
+            
+            {conflictRecord && (
+              <div className="text-zinc-500 text-xs mt-1">
+                Conflict: existing score is <span className="text-green-400 font-bold">{conflictRecord.score}</span>
+              </div>
+            )}
+          </div>
 
-          {/* Middle: Records List OR (Autocomplete / Conflict Popup) */}
+          {/* Middle: Records List OR Autocomplete */}
           <div className="flex-1 overflow-hidden relative border-b border-green-900/50 bg-zinc-950">
-            {!showAddForm ? (
-              <div className="h-full overflow-y-auto p-4 pb-24 relative z-20">
-                <div className="mb-4">
+            {!isInputMode ? (
+              <div className="h-full overflow-y-auto p-4 pb-24 relative z-20 flex flex-col gap-2">
+                {/* Search / Filter Card */}
+                <div className="bg-zinc-900/50 border border-green-900/30 p-3 rounded mb-2">
                   <input
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Search connections..."
-                    className="w-full bg-zinc-950 border border-green-900/30 focus:border-green-400 outline-none px-4 py-3 text-green-300 rounded font-bold transition-colors"
+                    placeholder="Search / Filter..."
+                    className="w-full bg-transparent outline-none text-green-300 font-bold placeholder-green-700/50"
                   />
                 </div>
+                
                 {filteredRecords.length === 0 ? (
                   <div className="text-zinc-500 italic">{records.length === 0 ? 'No connections saved yet.' : 'No matches found.'}</div>
                 ) : (
-                  <div className="flex flex-col gap-2">
-                    {filteredRecords.map((r, i) => (
-                      <RecordCard 
-                        key={r.personOne + '-' + r.personTwo}
-                        index={i}
-                        record={r} 
-                        onEdit={() => handleStartEdit(r)} 
-                        onDelete={() => handleDelete(r)} 
-                      />
-                    ))}
-                  </div>
+                  filteredRecords.map((r, i) => (
+                    <RecordCard 
+                      key={r.personOne + '-' + r.personTwo}
+                      index={i}
+                      record={r}
+                      onEdit={() => handleStartEdit(r)}
+                      onDelete={() => handleDelete(r)}
+                    />
+                  ))
                 )}
-              </div>
-            ) : conflictRecord ? (
-              <div className="absolute inset-0 bg-zinc-950 flex flex-col items-center justify-center p-6 text-center z-10">
-                <div className="bg-zinc-900 border border-green-800 p-6 rounded shadow-xl w-full max-w-sm">
-                  <h3 className="text-xl font-bold text-green-400 mb-2">Record Exists</h3>
-                  <p className="text-green-300 mb-6">
-                    Current score is <span className="font-bold text-green-400">{conflictRecord.score}</span>
-                  </p>
-                  <div className="flex justify-between w-full mt-4">
-                    <button 
-                      onClick={(e) => { e.preventDefault(); handleCancelConflict(); }}
-                      onPointerDown={(e) => e.preventDefault()}
-                      className="text-zinc-500 hover:text-red-400 font-bold transition-colors"
-                    >
-                      [ Cancel ]
-                    </button>
-                    <button 
-                      onClick={(e) => { e.preventDefault(); handleUpdate(); }}
-                      onPointerDown={(e) => e.preventDefault()}
-                      className="text-green-500 hover:text-green-300 font-bold transition-colors"
-                    >
-                      [ Update ]
-                    </button>
-                  </div>
-                </div>
               </div>
             ) : (
               <TerminalAutocomplete 
@@ -729,136 +704,63 @@ export default function App({ graphId, onBack, onEnterOnline }: { graphId?: stri
               />
             )}
           </div>
-          
-          {/* FAB for Add Connection */}
-          {!showAddForm && !isInputMode && (
-            <button
-              onClick={() => setShowAddForm(true)}
-              className="absolute bottom-20 right-6 w-14 h-14 bg-green-900 border-2 border-green-500 rounded-full flex items-center justify-center text-green-300 shadow-[0_0_15px_rgba(34,197,94,0.3)] hover:scale-105 active:scale-95 transition-transform z-40"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-              </svg>
-            </button>
-          )}
         </>
       ) : (
         <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4 border-b border-green-900/50">
-          <div className="grid grid-cols-2 gap-4">
-            <button 
-              onClick={() => setActiveOutTool('GRAPH')}
-              className="bg-zinc-900 border border-green-900/50 p-4 rounded flex flex-col items-start hover:border-green-500 transition-colors text-left group"
-            >
-              <pre className="text-green-600 font-mono text-[10px] leading-tight mb-3">
-{` O-O
- |/
- O`}
-              </pre>
-              <h3 className="text-green-400 font-bold text-sm sm:text-base mb-1 group-hover:text-green-300">Graph Visualization</h3>
-              <p className="text-zinc-500 text-xs sm:text-sm font-bold hidden sm:block">Interactive node network</p>
-            </button>
-            <button 
-              onClick={() => setActiveOutTool('PEOPLE')}
-              className="bg-zinc-900 border border-green-900/50 p-4 rounded flex flex-col items-start hover:border-green-500 transition-colors text-left group"
-            >
-              <pre className="text-green-600 font-mono text-[10px] leading-tight mb-3">
-{`  O
- /|\\
- / \\`}
-              </pre>
-              <h3 className="text-green-400 font-bold text-sm sm:text-base mb-1 group-hover:text-green-300">Key People Analysis</h3>
-              <p className="text-zinc-500 text-xs sm:text-sm font-bold hidden sm:block">Centrality and influence metrics</p>
-            </button>
-            <button 
-              onClick={() => setActiveOutTool('GROUPS')}
-              className="bg-zinc-900 border border-green-900/50 p-4 rounded flex flex-col items-start hover:border-green-500 transition-colors text-left group"
-            >
-              <pre className="text-green-600 font-mono text-[10px] leading-tight mb-3">
-{` O O
- O O`}
-              </pre>
-              <h3 className="text-green-400 font-bold text-sm sm:text-base mb-1 group-hover:text-green-300">Group Detection</h3>
-              <p className="text-zinc-500 text-xs sm:text-sm font-bold hidden sm:block">Social clusters and communities</p>
-            </button>
-            <button 
-              onClick={() => setActiveOutTool('GENDER')}
-              className="bg-zinc-900 border border-green-900/50 p-4 rounded flex flex-col items-start hover:border-green-500 transition-colors text-left group"
-            >
-              <pre className="text-green-600 font-mono text-[10px] leading-tight mb-3">
-{` M F
- F M`}
-              </pre>
-              <h3 className="text-green-400 font-bold text-sm sm:text-base mb-1 group-hover:text-green-300">Gender Patterns</h3>
-              <p className="text-zinc-500 text-xs sm:text-sm font-bold hidden sm:block">Homophily and class composition</p>
-            </button>
-            <button 
-              onClick={() => setActiveOutTool('RELATIONSHIPS')}
-              className="bg-zinc-900 border border-green-900/50 p-4 rounded flex flex-col items-start hover:border-green-500 transition-colors text-left group"
-            >
-              <pre className="text-green-600 font-mono text-[10px] leading-tight mb-3">
-{` <3
- </3`}
-              </pre>
-              <h3 className="text-green-400 font-bold text-sm sm:text-base mb-1 group-hover:text-green-300">Relationships</h3>
-              <p className="text-zinc-500 text-xs sm:text-sm font-bold hidden sm:block">Relationship status distribution</p>
-            </button>
-          </div>
+          <GraphPage records={records} onClose={() => setMainTab('IN')} />
         </div>
       )}
 
       {/* Bottom: Header/Menu OR Score Selector */}
       <div className="shrink-0 flex items-center p-2 gap-4 bg-zinc-900/50 min-h-[5rem]">
-        {(!isInputMode || mainTab === 'OUT' || !showAddForm) ? (
-                    <div className="w-full flex items-center justify-between px-2 gap-2 h-16">
-            <div className="flex flex-col">
+        {!isInputMode ? (
+          <div className="w-full flex items-center justify-between px-2 gap-2 h-16">
+            <div className="flex items-center gap-4">
+              <div className="flex items-center bg-zinc-950 border border-green-900/50 p-1 shrink-0 rounded-sm">
+                <button 
+                  onClick={() => setMainTab('IN')}
+                  className={`px-3 sm:px-4 py-1 rounded-sm text-xs sm:text-sm font-bold transition-colors ${mainTab === 'IN' ? 'bg-green-700 text-zinc-950' : 'text-green-600/50'}`}
+                >
+                  IN
+                </button>
+                <button 
+                  onClick={() => setMainTab('OUT')}
+                  className={`px-3 sm:px-4 py-1 rounded-sm text-xs sm:text-sm font-bold transition-colors ${mainTab === 'OUT' ? 'bg-green-700 text-zinc-950' : 'text-green-600/50'}`}
+                >
+                  OUT
+                </button>
+              </div>
+              
               {activeUsers > 0 && (
-                <div className="text-[10px] font-bold text-green-400 bg-green-900/20 px-1 py-0.5 rounded animate-pulse w-max mb-1">
+                <div className="text-[10px] font-bold text-green-400 bg-green-900/20 px-1 py-0.5 rounded animate-pulse w-max">
                   {activeUsers} user{activeUsers > 1 ? 's' : ''} active
                 </div>
               )}
-              <h1 className="text-base sm:text-lg font-bold uppercase tracking-wider text-green-400 shrink-0">Paradooshanam</h1>
-            </div>
-            
-            <div className="flex items-center bg-zinc-950 border border-green-900/50 p-1 shrink-0 rounded-sm">
-              <button 
-                onClick={() => setMainTab('IN')}
-                className={`px-3 sm:px-4 py-1 rounded-sm text-xs sm:text-sm font-bold transition-colors ${mainTab === 'IN' ? 'bg-green-700 text-zinc-950' : 'text-green-600/50'}`}
-              >
-                IN
-              </button>
-              <button 
-                onClick={() => setMainTab('OUT')}
-                className={`px-3 sm:px-4 py-1 rounded-sm text-xs sm:text-sm font-bold transition-colors ${mainTab === 'OUT' ? 'bg-green-700 text-zinc-950' : 'text-green-600/50'}`}
-              >
-                OUT
-              </button>
             </div>
 
-            <div className="flex justify-end shrink-0">
-              <button 
-                onClick={() => setIsMenuOpen(true)}
-                className="text-green-400 p-2 hover:bg-green-900/30 rounded"
-              >
-                <Menu size={24} />
-              </button>
-            </div>
+            <button 
+              onClick={() => setIsMenuOpen(true)}
+              className="text-zinc-500 hover:text-green-400 font-bold transition-colors"
+            >
+              [ Menu ]
+            </button>
           </div>
         ) : (
-          <div className="flex-1 flex flex-col sm:flex-row gap-2">
-            <div className="flex-1 flex flex-col gap-2">
-              <div className="h-16 relative overflow-hidden bg-zinc-950 rounded border border-green-900/50">
+          <div className="w-full flex flex-col gap-2">
+            <div className="flex items-center gap-2 h-16">
+              <div className="flex-1 overflow-hidden bg-zinc-950 rounded border border-green-900/50 h-full relative">
                 <ScoreSelector score={score} onChange={setScore} />
               </div>
-              <RelationshipStatusSelector status={relationshipStatus} onChange={setRelationshipStatus} />
+              <div className="shrink-0">
+                <RelationshipStatusSelector status={relationshipStatus} onChange={setRelationshipStatus} />
+              </div>
+              <button 
+                onClick={handleOK}
+                className="shrink-0 h-full px-6 bg-green-900/30 text-green-400 font-bold border border-green-500/50 rounded hover:bg-green-900/50 active:bg-green-900 transition-colors"
+              >
+                OK
+              </button>
             </div>
-            <button
-              onClick={(e) => { e.preventDefault(); handleSave(); }}
-              onPointerDown={(e) => e.preventDefault()}
-              disabled={!personOne.trim() || !personTwo.trim() || !!conflictRecord}
-              className="px-6 h-16 sm:h-auto text-green-500 hover:text-green-300 font-bold flex items-center justify-center disabled:opacity-30 transition-colors border border-green-900/50 bg-zinc-950 rounded sm:mt-0"
-            >
-              [ OK ]
-            </button>
           </div>
         )}
       </div>
@@ -1019,21 +921,89 @@ function RelationshipStatusSelector({
   status: RelationshipStatus;
   onChange: (s: RelationshipStatus) => void;
 }) {
-  const options: RelationshipStatus[] = ['None', 'Talking Stage', 'Complicated', 'In a Relationship'];
+  const [isOpen, setIsOpen] = useState(false);
+  const [highlighted, setHighlighted] = useState<RelationshipStatus | null>(null);
+  const [isAnimating, setIsAnimating] = useState(false);
+  
+  const options: { val: RelationshipStatus, abbr: string, sym: string }[] = [
+    { val: 'None', abbr: 'N', sym: '—' },
+    { val: 'Talking Stage', abbr: 'T', sym: '^_^' },
+    { val: 'Complicated', abbr: 'C', sym: '</3' },
+    { val: 'In a Relationship', abbr: 'R', sym: '<3' }
+  ];
+
+  const currentOpt = options.find(o => o.val === status) || options[0];
+
+  const handlePointerDown = (e: React.PointerEvent) => {
+    e.preventDefault();
+    setIsOpen(true);
+    setHighlighted(status);
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+  };
+
+  const handlePointerMove = (e: React.PointerEvent) => {
+    if (!isOpen || isAnimating) return;
+    
+    // Find element under pointer
+    const el = document.elementFromPoint(e.clientX, e.clientY);
+    if (el) {
+      const optVal = el.getAttribute('data-status-val');
+      if (optVal) {
+        setHighlighted(optVal as RelationshipStatus);
+      }
+    }
+  };
+
+  const handlePointerUp = (e: React.PointerEvent) => {
+    (e.target as HTMLElement).releasePointerCapture(e.pointerId);
+    if (!isOpen || isAnimating) return;
+    
+    setIsAnimating(true);
+    if (highlighted) {
+      onChange(highlighted);
+    }
+    
+    setTimeout(() => {
+      setIsOpen(false);
+      setIsAnimating(false);
+    }, 100);
+  };
+
   return (
-    <div className="flex flex-col w-full py-2 text-sm text-green-500 gap-1 mt-2 mb-2">
-      <div className="text-zinc-500 text-xs font-bold uppercase mb-1 flex-shrink-0">Status</div>
-      <div className="flex flex-wrap gap-2">
-        {options.map(opt => (
-          <button
-            key={opt}
-            onClick={(e) => { e.preventDefault(); onChange(opt); }}
-            className={`px-2 py-1 text-xs border rounded font-bold transition-colors ${status === opt ? 'bg-green-400 text-zinc-950 border-green-400' : 'border-green-900/50 text-green-700 hover:text-green-400'}`}
-          >
-            {opt}
-          </button>
-        ))}
+    <div className="relative h-full select-none touch-none flex items-center justify-center">
+      <div 
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerUp}
+        className={`h-full border rounded flex items-center justify-center px-4 font-bold transition-colors cursor-pointer ${
+          isOpen ? 'bg-green-900/50 border-green-400 text-green-300' : 'bg-zinc-950 border-green-900/50 text-green-500 hover:text-green-400'
+        }`}
+      >
+        <span>{currentOpt.abbr} ▼</span>
       </div>
+
+      {isOpen && (
+        <div 
+          className="absolute bottom-full right-0 mb-2 bg-zinc-950 border border-green-900/50 rounded shadow-[0_0_15px_rgba(0,0,0,0.8)] z-50 flex flex-col p-1 w-48 touch-none pointer-events-none"
+        >
+          {options.map(opt => {
+            const isSel = highlighted === opt.val;
+            return (
+              <div 
+                key={opt.val}
+                data-status-val={opt.val}
+                className={`px-3 py-3 rounded text-sm font-bold pointer-events-auto transition-colors flex justify-between items-center ${
+                  isSel ? 'bg-green-400 text-zinc-950' : 'text-green-500'
+                }`}
+              >
+                <span>{opt.val}</span>
+                <span className="font-mono text-xs opacity-75">{opt.sym}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
