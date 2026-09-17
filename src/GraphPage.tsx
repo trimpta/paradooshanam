@@ -224,7 +224,7 @@ function NodeLabel({ name, obfuscated }: { name: string, obfuscated: boolean }) 
         step++;
         if (!spanRef.current) { clearInterval(intervalId); return; }
 
-        if (step <= 10) {
+        if (step <= 15) {
            let arr = currentStr.split('');
            for (let i = 1; i < arr.length - 1; i++) {
              if (Math.random() > 0.6) {
@@ -236,7 +236,7 @@ function NodeLabel({ name, obfuscated }: { name: string, obfuscated: boolean }) 
            }
            currentStr = arr.join('');
            spanRef.current.textContent = currentStr;
-        } else if (step <= 20) {
+        } else if (step <= 30) {
            let arr = currentStr.split('');
            if (arr.length > 3) {
              let candidates = [];
@@ -266,7 +266,7 @@ function NodeLabel({ name, obfuscated }: { name: string, obfuscated: boolean }) 
            clearInterval(intervalId);
            spanRef.current.textContent = '*';
         }
-      }, 30);
+      }, 50);
     };
 
     const runShow = () => {
@@ -279,7 +279,7 @@ function NodeLabel({ name, obfuscated }: { name: string, obfuscated: boolean }) 
          step++;
          if (!spanRef.current) { clearInterval(intervalId); return; }
 
-         if (step <= 10) {
+         if (step <= 15) {
            let arr = currentStr.split('');
            if (arr.length - 2 < targetInnerLen) {
              const addCount = Math.min(targetInnerLen - (arr.length - 2), Math.random() > 0.5 ? 2 : 1);
@@ -290,7 +290,7 @@ function NodeLabel({ name, obfuscated }: { name: string, obfuscated: boolean }) 
            }
            currentStr = arr.join('');
            spanRef.current.textContent = currentStr;
-         } else if (step <= 20) {
+         } else if (step <= 30) {
            let arr = currentStr.split('');
            while (arr.length < targetInnerLen + 2) arr.splice(1, 0, 'X');
            while (arr.length > targetInnerLen + 2) arr.splice(1, 1);
@@ -311,7 +311,7 @@ function NodeLabel({ name, obfuscated }: { name: string, obfuscated: boolean }) 
            clearInterval(intervalId);
            spanRef.current.textContent = `[ ${name} ]`;
          }
-       }, 30);
+       }, 50);
     };
 
     const delay = Math.random() * 200;
