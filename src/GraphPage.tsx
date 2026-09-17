@@ -12,6 +12,156 @@ interface Link extends d3.SimulationLinkDatum<Node> {
   score: number;
 }
 
+const SYMBOLS = "!@#$%^&*()_+{}|:<>?~-=\\[];',./";
+
+// --- Shared single animation loop for all node labels ---
+// Each registered node gets a ref to its span and a target state.
+// One setInterval drives all of them — zero per-node timers.
+type NodeAnimEntry = {
+  el: HTMLSpanElement;
+  name: string;
+  targetObfuscated: boolean;
+  currentStr: string;
+  step: number;
+  totalSteps: number;
+  phase: 'scramble' | 'collapse' | 'expand' | 'unscramble' | 'done';
+  startAt: number; // timestamp when this node's animation begins
+};
+
+let animRegistry: Map<string, NodeAnimEntry> = new Map();
+let animIntervalId: any = null;
+
+function runSharedLoop() {
+  if (animIntervalId) return;
+  animIntervalId = setInterval(() => {
+    const now = Date.now();
+    let anyActive = false;
+
+    animRegistry.forEach((entry) => {
+      if (!entry.el || !entry.el.isConnected) return;
+      if (now < entry.startAt) { anyActive = true; return; } // not started yet
+      if (entry.phase === 'done') return;
+
+      anyActive = true;
+      entry.step++;
+
+      if (entry.targetObfuscated) {
+        // --- HIDE: scramble then collapse ---
+        if (entry.phase === 'scramble') {
+          const arr = entry.currentStr.split('');
+          for (let i = 1; i < arr.length - 1; i++) {
+            if (Math.random() > 0.55) {
+              arr[i] = SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)];
+            }
+          }
+          if (!arr.includes('*')) {
+            arr[Math.floor(Math.random() * (arr.length - 2)) + 1] = '*';
+          }
+          entry.currentStr = arr.join('');
+          entry.el.textContent = entry.currentStr;
+          if (entry.step >= 8) { entry.phase = 'collapse'; entry.step = 0; }
+        } else if (entry.phase === 'collapse') {
+          const arr = entry.currentStr.split('');
+          if (arr.length > 3) {
+            const candidates: number[] = [];
+            for (let i = 1; i < arr.length - 1; i++) {
+              if (arr[i] !== '*') candidates.push(i);
+            }
+            if (candidates.length > 0) {
+              arr.splice(candidates[Math.floor(Math.random() * candidates.length)], 1);
+            } else {
+              arr.splice(1, 1);
+            }
+            entry.currentStr = arr.join('');
+            entry.el.textContent = entry.currentStr;
+          } else {
+            entry.el.textContent = '*';
+            entry.phase = 'done';
+          }
+        }
+      } else {
+        // --- SHOW: expand then unscramble ---
+        const target = `[ ${entry.name} ]`;
+        if (entry.phase === 'expand') {
+          const arr = entry.currentStr.split('');
+          const targetLen = target.length;
+          if (arr.length < targetLen) {
+            const insertIdx = Math.floor(Math.random() * (arr.length - 2)) + 1;
+            arr.splice(insertIdx, 0, SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)]);
+            entry.currentStr = arr.join('');
+            entry.el.textContent = entry.currentStr;
+          } else {
+            entry.phase = 'unscramble';
+            entry.step = 0;
+          }
+        } else if (entry.phase === 'unscramble') {
+          const arr = entry.currentStr.split('');
+          const targetArr = target.split('');
+          // Clamp length
+          while (arr.length < targetArr.length) arr.push(' ');
+          while (arr.length > targetArr.length) arr.splice(arr.length - 2, 1);
+          let changed = 0;
+          for (let i = 0; i < arr.length; i++) {
+            if (arr[i] !== targetArr[i] && Math.random() > 0.4) {
+              arr[i] = targetArr[i];
+              changed++;
+            }
+          }
+          entry.currentStr = arr.join('');
+          entry.el.textContent = entry.currentStr;
+          if (entry.currentStr === target || changed === 0) {
+            entry.el.textContent = target;
+            entry.phase = 'done';
+          }
+        }
+      }
+    });
+
+    if (!anyActive) {
+      clearInterval(animIntervalId);
+      animIntervalId = null;
+    }
+  }, 50);
+}
+
+function scheduleNodeAnim(
+  name: string,
+  el: HTMLSpanElement,
+  targetObfuscated: boolean,
+  delayMs: number
+) {
+  const existing = animRegistry.get(name);
+  const currentText = el.textContent ?? (targetObfuscated ? `[ ${name} ]` : '*');
+
+  const entry: NodeAnimEntry = {
+    el,
+    name,
+    targetObfuscated,
+    currentStr: currentText,
+    step: 0,
+    totalSteps: 0,
+    phase: targetObfuscated ? 'scramble' : 'expand',
+    startAt: Date.now() + delayMs,
+  };
+
+  // For show animation, start from [ * ] if coming from *
+  if (!targetObfuscated) {
+    entry.currentStr = '[ * ]';
+    el.textContent = '[ * ]';
+  }
+
+  if (existing) {
+    // Override in place — el ref stays the same
+    Object.assign(existing, entry);
+  } else {
+    animRegistry.set(name, entry);
+  }
+
+  runSharedLoop();
+}
+
+// -------------------------------------------------------
+
 export function GraphVisualizer({ records, obfuscated }: { records: ConnectionRecord[], obfuscated: boolean }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [nodes, setNodes] = useState<Node[]>([]);
@@ -77,6 +227,20 @@ export function GraphVisualizer({ records, obfuscated }: { records: ConnectionRe
       .call(zoom)
       .on("dblclick.zoom", null);
   }, []);
+
+  // Pause physics during animation, resume after
+  const prevObfuscated = useRef(obfuscated);
+  useEffect(() => {
+    if (prevObfuscated.current === obfuscated) return;
+    prevObfuscated.current = obfuscated;
+    const sim = simRef.current;
+    if (!sim) return;
+    // Freeze physics
+    sim.stop();
+    // Resume after animation completes (~900ms: max stagger 400 + anim ~500)
+    const t = setTimeout(() => sim.restart(), 900);
+    return () => clearTimeout(t);
+  }, [obfuscated]);
 
   const [draggedNode, setDraggedNode] = useState<Node | null>(null);
   const pointerStartPos = useRef<{x: number, y: number} | null>(null);
@@ -172,7 +336,7 @@ export function GraphVisualizer({ records, obfuscated }: { records: ConnectionRe
         </svg>
 
         <div className="absolute inset-0 pointer-events-none" style={{ transformOrigin: '0 0', transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.k})` }}>
-          {nodes.map((node) => {
+          {nodes.map((node, idx) => {
             if (node.x == null || node.y == null) return null;
             const isSelected = selectedNodeId === node.id;
             const isNeighbor = neighborSet.has(node.id);
@@ -192,7 +356,7 @@ export function GraphVisualizer({ records, obfuscated }: { records: ConnectionRe
                 onPointerUp={handlePointerUp}
                 onPointerCancel={handlePointerUp}
               >
-                <NodeLabel name={node.id} obfuscated={shouldObfuscate} />
+                <NodeLabel name={node.id} obfuscated={shouldObfuscate} index={idx} totalNodes={nodes.length} />
               </div>
             );
           })}
@@ -201,10 +365,8 @@ export function GraphVisualizer({ records, obfuscated }: { records: ConnectionRe
   );
 }
 
-
-function NodeLabel({ name, obfuscated }: { name: string, obfuscated: boolean }) {
+function NodeLabel({ name, obfuscated, index, totalNodes }: { name: string, obfuscated: boolean, index: number, totalNodes: number }) {
   const spanRef = useRef<HTMLSpanElement>(null);
-  // Track the last obfuscated value we've already animated so we don't re-fire
   const prevObfuscated = useRef(obfuscated);
 
   useEffect(() => {
@@ -212,26 +374,10 @@ function NodeLabel({ name, obfuscated }: { name: string, obfuscated: boolean }) 
     if (!el || prevObfuscated.current === obfuscated) return;
     prevObfuscated.current = obfuscated;
 
-    if (obfuscated) {
-      // Scramble out → swap text at blur peak → reveal as *
-      el.classList.remove('node-label-unscrambling');
-      el.classList.add('node-label-scrambling');
-      // At 56% of 550ms ≈ 308ms the text is fully blurred/invisible → swap
-      const t = setTimeout(() => {
-        if (spanRef.current) spanRef.current.textContent = '*';
-      }, 310 + Math.random() * 60); // tiny jitter for chaotic feel
-      return () => clearTimeout(t);
-    } else {
-      // Instantly set text, then animate in
-      el.textContent = `[ ${name} ]`;
-      el.classList.remove('node-label-scrambling');
-      el.classList.add('node-label-unscrambling');
-      const t = setTimeout(() => {
-        if (spanRef.current) spanRef.current.classList.remove('node-label-unscrambling');
-      }, 400);
-      return () => clearTimeout(t);
-    }
-  }, [obfuscated, name]);
+    // Stagger: spread nodes evenly over 400ms window
+    const staggerDelay = totalNodes > 1 ? (index / totalNodes) * 400 : 0;
+    scheduleNodeAnim(name, el, obfuscated, staggerDelay);
+  }, [obfuscated, name, index, totalNodes]);
 
   const initialText = useRef(obfuscated ? '*' : `[ ${name} ]`);
   return <span ref={spanRef}>{initialText.current}</span>;
