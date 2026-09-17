@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo, KeyboardEvent, TouchEvent } from 'react';
 import { Menu } from 'lucide-react';
-import { GraphPage, GraphVisualizer } from './GraphPage';
+import { GraphPage } from './GraphPage';
 import { KeyPeoplePage } from './KeyPeoplePage';
 import { GroupDetectionPage } from './GroupDetectionPage';
 import { PersonEditorPage } from './PersonEditorPage';
@@ -500,15 +500,6 @@ export default function App() {
 
           {/* Middle: Records List OR (Autocomplete / Conflict Popup) */}
           <div className="flex-1 overflow-hidden relative border-b border-green-900/50 bg-zinc-950">
-            {/* Live Graph Background */}
-            {(!showAddForm && !isInputMode && !conflictRecord) && (
-              <div className="absolute inset-0 z-0 pointer-events-none opacity-50">
-                <GraphVisualizer records={records} obfuscated={true} />
-              </div>
-            )}
-            
-            <div className="absolute inset-0 z-10 pointer-events-none" />
-
             {!showAddForm ? (
               <div className="h-full overflow-y-auto p-4 pb-24 relative z-20">
                 <div className="mb-4">
@@ -517,7 +508,7 @@ export default function App() {
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="Search connections..."
-                    className="w-full bg-zinc-950/40 backdrop-blur-md border border-green-900/30 focus:border-green-400 outline-none px-4 py-3 text-green-300 rounded font-bold transition-colors"
+                    className="w-full bg-zinc-950 border border-green-900/30 focus:border-green-400 outline-none px-4 py-3 text-green-300 rounded font-bold transition-colors"
                   />
                 </div>
                 {filteredRecords.length === 0 ? (
@@ -989,7 +980,7 @@ function RecordCard({
           transform: `translateX(${translateX}px)`,
           transition: isDragging ? 'none' : 'transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
         }}
-        className="relative bg-zinc-950/40 backdrop-blur-md rounded border border-green-900/30 px-3 py-3 grid grid-cols-[auto_1fr_1fr_auto] gap-2 items-center text-green-300 text-xs sm:text-sm font-bold cursor-grab active:cursor-grabbing select-none"
+        className="relative bg-zinc-950 rounded border border-green-900/30 px-3 py-3 grid grid-cols-[auto_1fr_1fr_auto] gap-2 items-center text-green-300 text-xs sm:text-sm font-bold cursor-grab active:cursor-grabbing select-none"
       >
         <span className="text-zinc-600 font-mono text-xs w-5">{index + 1}.</span>
         <div className="truncate text-zinc-500">{record.personOne}</div>
