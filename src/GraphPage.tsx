@@ -16,14 +16,15 @@ const SYMBOLS = "!@#$%^&*()_+{}|:<>?~-=\\[];',./";
 
 // --- Shared single animation loop for all node labels ---
 type NodeAnimEntry = {
-  el: HTMLSpanElement;
+  el: HTMLElement;
   name: string;
   targetObfuscated: boolean;
   currentStr: string;
   step: number;
   totalSteps: number;
-  phase: 'scramble' | 'collapse' | 'expand' | 'unscramble' | 'done';
+  phase: 'scramble' | 'collapse' | 'expand' | 'bracket' | 'unscramble' | 'done';
   startAt: number;
+  noBrackets?: boolean;
 };
 
 let animRegistry: Map<string, NodeAnimEntry> = new Map();
@@ -46,28 +47,38 @@ function runSharedLoop() {
       if (entry.targetObfuscated) {
         if (entry.phase === 'scramble') {
           const arr = entry.currentStr.split('');
-          for (let i = 1; i < arr.length - 1; i++) {
+          const startIdx = entry.noBrackets ? 0 : 1;
+          const endIdx = entry.noBrackets ? arr.length : arr.length - 1;
+          for (let i = startIdx; i < endIdx; i++) {
             if (Math.random() > 0.55) {
               arr[i] = SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)];
             }
           }
           if (!arr.includes('*')) {
-            arr[Math.floor(Math.random() * (arr.length - 2)) + 1] = '*';
+            const range = endIdx - startIdx;
+            if (range > 0) {
+              arr[Math.floor(Math.random() * range) + startIdx] = '*';
+            } else {
+              arr[startIdx] = '*';
+            }
           }
           entry.currentStr = arr.join('');
           entry.el.textContent = entry.currentStr;
           if (entry.step >= 8) { entry.phase = 'collapse'; entry.step = 0; }
         } else if (entry.phase === 'collapse') {
           const arr = entry.currentStr.split('');
-          if (arr.length > 3) {
+          const minLen = entry.noBrackets ? 1 : 3;
+          if (arr.length > minLen) {
+            const startIdx = entry.noBrackets ? 0 : 1;
+            const endIdx = entry.noBrackets ? arr.length : arr.length - 1;
             const candidates: number[] = [];
-            for (let i = 1; i < arr.length - 1; i++) {
+            for (let i = startIdx; i < endIdx; i++) {
               if (arr[i] !== '*') candidates.push(i);
             }
             if (candidates.length > 0) {
               arr.splice(candidates[Math.floor(Math.random() * candidates.length)], 1);
             } else {
-              arr.splice(1, 1);
+              arr.splice(startIdx, 1);
             }
             entry.currentStr = arr.join('');
             entry.el.textContent = entry.currentStr;
@@ -77,19 +88,23 @@ function runSharedLoop() {
           }
         }
       } else {
-        const target = `[ ${entry.name} ]`;
+        const target = entry.noBrackets ? entry.name : `[ ${entry.name} ]`;
+        const nameLen = entry.name.length;
+        
         if (entry.phase === 'expand') {
-          const arr = entry.currentStr.split('');
-          const targetLen = target.length;
-          if (arr.length < targetLen) {
-            const insertIdx = Math.floor(Math.random() * (arr.length - 2)) + 1;
+          let arr = entry.currentStr.split('');
+          if (arr.length < nameLen) {
+            const insertIdx = Math.floor(Math.random() * arr.length);
             arr.splice(insertIdx, 0, SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)]);
             entry.currentStr = arr.join('');
             entry.el.textContent = entry.currentStr;
           } else {
-            entry.phase = 'unscramble';
-            entry.step = 0;
+            entry.phase = entry.noBrackets ? 'unscramble' : 'bracket';
           }
+        } else if (entry.phase === 'bracket') {
+          entry.currentStr = `[ ${entry.currentStr} ]`;
+          entry.el.textContent = entry.currentStr;
+          entry.phase = 'unscramble';
         } else if (entry.phase === 'unscramble') {
           const arr = entry.currentStr.split('');
           const targetArr = target.split('');
@@ -121,12 +136,13 @@ function runSharedLoop() {
 
 function scheduleNodeAnim(
   name: string,
-  el: HTMLSpanElement,
+  el: HTMLElement,
   targetObfuscated: boolean,
-  delayMs: number
+  delayMs: number,
+  noBrackets: boolean = false
 ) {
   const existing = animRegistry.get(name);
-  const currentText = el.textContent ?? (targetObfuscated ? `[ ${name} ]` : '*');
+  const currentText = el.textContent ?? (targetObfuscated ? (noBrackets ? name : `[ ${name} ]`) : '*');
 
   const entry: NodeAnimEntry = {
     el,
@@ -137,12 +153,10 @@ function scheduleNodeAnim(
     totalSteps: 0,
     phase: targetObfuscated ? 'scramble' : 'expand',
     startAt: Date.now() + delayMs,
+    noBrackets
   };
 
-  if (!targetObfuscated) {
-    entry.currentStr = '[ * ]';
-    el.textContent = '[ * ]';
-  }
+
 
   if (existing) {
     Object.assign(existing, entry);
@@ -515,6 +529,7 @@ import { CardHeader } from './CardHeader';
 
 export function GraphPage({ records, onClose }: { records: ConnectionRecord[], onClose: () => void }) {
   const [obfuscated, setObfuscated] = useState(false);
+  const toggleRef = useRef<HTMLButtonElement>(null);
   
   const [settings, setSettings] = useState<GraphSettings>({
     physicsEnabled: true,
@@ -527,6 +542,18 @@ export function GraphPage({ records, onClose }: { records: ConnectionRecord[], o
   const updateSetting = (key: keyof GraphSettings, value: any) => {
     setSettings(s => ({ ...s, [key]: value }));
   };
+
+  const initialToggleText = useRef(obfuscated ? '*' : '****');
+  const isInitialMount = useRef(true);
+  useEffect(() => {
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      return;
+    }
+    if (toggleRef.current) {
+      scheduleNodeAnim('****', toggleRef.current, obfuscated, 0, true);
+    }
+  }, [obfuscated]);
 
   const menuOptions = [
     {
@@ -579,14 +606,20 @@ export function GraphPage({ records, onClose }: { records: ConnectionRecord[], o
 
   return (
     <div className="absolute inset-0 bg-zinc-950 text-green-500 font-mono flex flex-col z-50">
-      <CardHeader title="Graph" onClose={onClose} menuOptions={menuOptions}>
-        <button
-          onClick={() => setObfuscated(!obfuscated)}
-          className="text-green-400 hover:text-green-300 font-bold tracking-widest px-4 py-1 border border-green-900/50 rounded bg-green-900/20"
-        >
-          {obfuscated ? '*' : '****'}
-        </button>
-      </CardHeader>
+      <CardHeader 
+        title="Graph" 
+        onClose={onClose} 
+        menuOptions={menuOptions}
+        centerContent={
+          <button
+            ref={toggleRef}
+            onClick={() => setObfuscated(!obfuscated)}
+            className="text-green-400 hover:text-green-300 font-bold tracking-widest px-4 py-1 border border-green-900/50 rounded bg-green-900/20 w-24 flex items-center justify-center whitespace-nowrap"
+          >
+            {initialToggleText.current}
+          </button>
+        } 
+      />
       <div className="flex-1 overflow-hidden relative">
         <GraphVisualizer records={records} obfuscated={obfuscated} settings={settings} />
       </div>

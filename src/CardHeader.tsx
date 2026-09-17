@@ -18,21 +18,27 @@ interface CardHeaderProps {
   onClose: () => void;
   menuOptions?: MenuOption[];
   children?: React.ReactNode;
+  centerContent?: React.ReactNode;
 }
 
-export function CardHeader({ title, onClose, menuOptions, children }: CardHeaderProps) {
+export function CardHeader({ title, onClose, menuOptions, children, centerContent }: CardHeaderProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [activeInfo, setActiveInfo] = useState<string | null>(null);
 
   return (
     <div className="relative shrink-0 z-50">
-      <div className="p-4 border-b border-green-900/50 flex justify-between items-center bg-zinc-950">
+      <div className="p-4 border-b border-green-900/50 flex justify-between items-center bg-zinc-950 relative">
         <div className="flex items-center gap-4">
           <button onClick={onClose} className="text-zinc-500 hover:text-green-400 font-bold transition-colors text-xl">
              &lt;-
           </button>
           <h2 className="text-xl font-bold uppercase tracking-wider text-green-400">{title}</h2>
         </div>
+        {centerContent && (
+          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
+            {centerContent}
+          </div>
+        )}
         <div className="flex items-center gap-4">
           {children}
           {menuOptions && menuOptions.length > 0 && (
