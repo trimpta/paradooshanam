@@ -7,6 +7,7 @@ export default function RootComponent() {
   const [session, setSession] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [activeGraphId, setActiveGraphId] = useState<string | null>(null);
+  const [isOnlineMode, setIsOnlineMode] = useState(false);
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -42,9 +43,16 @@ export default function RootComponent() {
     return <div className="bg-zinc-950 min-h-screen text-green-500 font-mono p-6 flex items-center justify-center">Loading...</div>;
   }
 
+  if (!isOnlineMode) {
+    return <App onEnterOnline={() => setIsOnlineMode(true)} />;
+  }
+
   if (!session) {
     return (
-      <div className="bg-zinc-950 min-h-screen text-green-500 font-mono flex items-center justify-center p-6">
+      <div className="bg-zinc-950 min-h-screen text-green-500 font-mono flex items-center justify-center p-6 flex-col">
+        <button onClick={() => setIsOnlineMode(false)} className="absolute top-6 left-6 text-zinc-500 hover:text-green-400 font-bold transition-colors">
+          [ &larr; Back to Local Mode ]
+        </button>
         <form onSubmit={handleAuth} className="bg-zinc-900 p-8 rounded border border-green-900/50 flex flex-col gap-4 w-full max-w-sm">
           <h1 className="text-2xl font-bold text-green-400 mb-4">{isSignUp ? 'Sign Up' : 'Sign In'}</h1>
           <input
@@ -76,5 +84,5 @@ export default function RootComponent() {
     return <App graphId={activeGraphId} onBack={() => setActiveGraphId(null)} />;
   }
 
-  return <ManageGraphsPage onSelectGraph={setActiveGraphId} />;
+  return <ManageGraphsPage onSelectGraph={setActiveGraphId} onBackToLocal={() => setIsOnlineMode(false)} />;
 }

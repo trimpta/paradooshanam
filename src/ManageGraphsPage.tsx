@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { supabase } from './lib/supabase';
 import { RealtimeChannel } from '@supabase/supabase-js';
 
-export function ManageGraphsPage({ onSelectGraph }: { onSelectGraph: (id: string) => void }) {
+export function ManageGraphsPage({ onSelectGraph, onBackToLocal }: { onSelectGraph: (id: string) => void, onBackToLocal: () => void }) {
   const [graphs, setGraphs] = useState<any[]>([]);
   const [newGraphName, setNewGraphName] = useState('');
   const [presenceCounts, setPresenceCounts] = useState<Record<string, number>>({});
@@ -62,7 +62,12 @@ export function ManageGraphsPage({ onSelectGraph }: { onSelectGraph: (id: string
 
   return (
     <div className="bg-zinc-950 min-h-screen text-green-500 font-mono p-6">
-      <h1 className="text-2xl font-bold mb-6 text-green-400">Manage Graphs</h1>
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-2xl font-bold text-green-400">Manage Graphs</h1>
+        <button onClick={onBackToLocal} className="text-zinc-500 hover:text-green-400 font-bold transition-colors">
+          [ Back to Local Mode ]
+        </button>
+      </div>
       
       <div className="mb-8 flex gap-2">
         <input 
