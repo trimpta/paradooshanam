@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { ConnectionRecord, Gender } from './App';
+import { CardHeader } from './CardHeader';
 
 interface GenderAnalysisPageProps {
   names: string[];
@@ -71,10 +72,7 @@ export function GenderAnalysisPage({ names, genders, records, onClose }: GenderA
 
   return (
     <div className="absolute inset-0 z-50 bg-zinc-950 text-green-500 font-mono flex flex-col">
-      <div className="p-4 border-b border-green-900/50 flex justify-between items-center shrink-0">
-        <h2 className="text-xl font-bold uppercase tracking-wider text-green-400">Gender Patterns</h2>
-        <button onClick={onClose} className="text-zinc-500 hover:text-red-400 font-bold transition-colors">[ Close ]</button>
-      </div>
+      <CardHeader title="Gender Patterns" onClose={onClose} />
 
       <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 flex flex-col gap-8">
         <div className="bg-zinc-900/50 p-6 rounded border border-green-900/30">

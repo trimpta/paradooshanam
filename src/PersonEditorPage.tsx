@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { CardHeader } from './CardHeader';
 import { Gender, fuzzyMatch } from './App';
 
 interface PersonEditorPageProps {
@@ -30,10 +31,7 @@ export function PersonEditorPage({ names, genders, onSave, onClose }: PersonEdit
 
   return (
     <div className="absolute inset-0 z-[60] bg-zinc-950 text-green-500 font-mono flex flex-col">
-      <div className="p-4 border-b border-green-900/50 flex justify-between items-center shrink-0">
-        <h2 className="text-xl font-bold uppercase tracking-wider text-green-400">Person Editor</h2>
-        <button onClick={onClose} className="text-zinc-500 hover:text-red-400 font-bold transition-colors">[ Close ]</button>
-      </div>
+      <CardHeader title="Person Editor" onClose={onClose} />
 
       <div className="p-4 border-b border-green-900/50 shrink-0">
         <input

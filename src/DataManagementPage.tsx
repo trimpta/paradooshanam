@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { ConnectionRecord, Gender } from './App';
 import { GraphVisualizer } from './GraphPage';
+import { CardHeader } from './CardHeader';
 
 interface DataManagementPageProps {
   records: ConnectionRecord[];
@@ -178,14 +179,17 @@ export function DataManagementPage({
 
     return (
       <div className="absolute inset-0 z-50 h-[100dvh] bg-zinc-950 text-green-500 font-mono flex flex-col">
-        <div className="p-4 border-b border-green-900/50 flex justify-between items-center shrink-0">
-          <h2 className="text-xl font-bold uppercase tracking-wider text-green-400">Map Scores</h2>
-          <button onClick={() => setPreviewRecords(null)} className="text-zinc-500 hover:text-red-400 font-bold transition-colors">[ Cancel ]</button>
-        </div>
+        <CardHeader title="Map Scores" onClose={() => setPreviewRecords(null)} />
         
         {/* Graph Preview */}
         <div className="flex-1 relative border-b border-green-900/50 min-h-0">
-          <GraphVisualizer records={mappedRecords} obfuscated={false} />
+          <GraphVisualizer records={mappedRecords} obfuscated={false} settings={{
+            physicsEnabled: true,
+            baseDistance: 20,
+            autoZoom: false,
+            chargeStrength: -200,
+            alphaDecay: 0.05
+          }} />
         </div>
 
         {/* Controls */}
@@ -241,10 +245,7 @@ export function DataManagementPage({
 
   return (
     <div className="absolute inset-0 z-50 h-[100dvh] bg-zinc-950 text-green-500 font-mono flex flex-col">
-      <div className="p-4 border-b border-green-900/50 flex justify-between items-center shrink-0">
-        <h2 className="text-xl font-bold uppercase tracking-wider text-green-400">Data Management</h2>
-        <button onClick={onClose} className="text-zinc-500 hover:text-red-400 font-bold transition-colors">[ Close ]</button>
-      </div>
+      <CardHeader title="Data Management" onClose={onClose} />
 
       <div className="flex border-b border-green-900/50 shrink-0">
         <button 

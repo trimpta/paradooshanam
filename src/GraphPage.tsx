@@ -155,7 +155,15 @@ function scheduleNodeAnim(
 
 // -------------------------------------------------------
 
-export function GraphVisualizer({ records, obfuscated }: { records: ConnectionRecord[], obfuscated: boolean }) {
+export interface GraphSettings {
+  physicsEnabled: boolean;
+  baseDistance: number;
+  autoZoom: boolean;
+  chargeStrength: number;
+  alphaDecay: number;
+}
+
+export function GraphVisualizer({ records, obfuscated, settings }: { records: ConnectionRecord[], obfuscated: boolean, settings: GraphSettings }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const simRef = useRef<d3.Simulation<Node, Link> | null>(null);
   const zoomRef = useRef<d3.ZoomBehavior<HTMLDivElement, unknown> | null>(null);
@@ -214,10 +222,10 @@ export function GraphVisualizer({ records, obfuscated }: { records: ConnectionRe
     let tickCount = 0;
 
     const simulation = d3.forceSimulation<Node, Link>(simNodes)
-      .force("link", d3.forceLink<Node, Link>(simLinks).id(d => d.id).distance(d => (11 - d.score) * 20))
-      .force("charge", d3.forceManyBody().strength(-200).theta(1.5))
+      .force("link", d3.forceLink<Node, Link>(simLinks).id(d => d.id).distance(d => (11 - d.score) * settings.baseDistance))
+      .force("charge", d3.forceManyBody().strength(settings.chargeStrength).theta(1.5))
       .force("center", d3.forceCenter(width / 2, height / 2))
-      .alphaDecay(0.05)
+      .alphaDecay(settings.alphaDecay)
       .on("tick", () => {
         // Throttle DOM writes to every other tick (~30fps visual, 60fps physics)
         tickCount++;
@@ -291,7 +299,7 @@ export function GraphVisualizer({ records, obfuscated }: { records: ConnectionRe
 
   // --- Auto-frame selected node and neighbors ---
   useEffect(() => {
-    if (!selectedNodeId || !containerRef.current || !zoomRef.current) return;
+    if (!settings.autoZoom || !selectedNodeId || !containerRef.current || !zoomRef.current) return;
 
     const currentNodes = nodesRef.current;
     const targetNode = currentNodes.find(n => n.id === selectedNodeId);
@@ -349,9 +357,22 @@ export function GraphVisualizer({ records, obfuscated }: { records: ConnectionRe
     const sim = simRef.current;
     if (!sim) return;
     sim.stop();
-    const t = setTimeout(() => sim.restart(), 900);
+    const t = setTimeout(() => {
+      if (settings.physicsEnabled) sim.restart();
+    }, 900);
     return () => clearTimeout(t);
-  }, [obfuscated]);
+  }, [obfuscated, settings.physicsEnabled]);
+
+  // Handle physics toggle
+  useEffect(() => {
+    if (!simRef.current) return;
+    if (settings.physicsEnabled) {
+      simRef.current.alphaTarget(0.3).restart();
+      setTimeout(() => simRef.current?.alphaTarget(0), 100);
+    } else {
+      simRef.current.stop();
+    }
+  }, [settings.physicsEnabled]);
 
   // --- Drag handling: refs instead of state to avoid re-renders during drag ---
   const draggedNodeRef = useRef<Node | null>(null);
@@ -490,23 +511,85 @@ function NodeLabel({ name, obfuscated, index, totalNodes }: { name: string, obfu
 }
 
 
+import { CardHeader } from './CardHeader';
+
 export function GraphPage({ records, onClose }: { records: ConnectionRecord[], onClose: () => void }) {
   const [obfuscated, setObfuscated] = useState(false);
+  
+  const [settings, setSettings] = useState<GraphSettings>({
+    physicsEnabled: true,
+    baseDistance: 20,
+    autoZoom: true,
+    chargeStrength: -200,
+    alphaDecay: 0.05
+  });
+
+  const updateSetting = (key: keyof GraphSettings, value: any) => {
+    setSettings(s => ({ ...s, [key]: value }));
+  };
+
+  const menuOptions = [
+    {
+      id: 'obfuscated',
+      label: 'Obfuscate Names',
+      type: 'toggle' as const,
+      value: obfuscated,
+      onChange: (v: boolean) => setObfuscated(v),
+      info: 'Scrambles all names into random symbols. Select a node to temporarily reveal it.'
+    },
+    {
+      id: 'physics',
+      label: 'Physics Simulation',
+      type: 'toggle' as const,
+      value: settings.physicsEnabled,
+      onChange: (v: boolean) => updateSetting('physicsEnabled', v),
+      info: 'Enable or disable the continuous force simulation. Turning this off locks nodes in place.'
+    },
+    {
+      id: 'autozoom',
+      label: 'Auto-Zoom to Neighbors',
+      type: 'toggle' as const,
+      value: settings.autoZoom,
+      onChange: (v: boolean) => updateSetting('autoZoom', v),
+      info: 'Automatically pans and zooms the camera to fit a node and all its connected neighbors when selected.'
+    },
+    {
+      id: 'distance',
+      label: 'Base Link Distance',
+      type: 'slider' as const,
+      value: settings.baseDistance,
+      onChange: (v: number) => updateSetting('baseDistance', v),
+      min: 5,
+      max: 50,
+      step: 1,
+      info: 'The base target length of the links between nodes. Higher values spread the graph out more.'
+    },
+    {
+      id: 'charge',
+      label: 'Repulsive Charge',
+      type: 'number' as const,
+      value: settings.chargeStrength,
+      onChange: (v: number) => updateSetting('chargeStrength', v),
+      info: 'The strength of the repulsive force between nodes. A more negative number pushes nodes further apart.'
+    },
+    {
+      id: 'decay',
+      label: 'Simulation Cooling',
+      type: 'slider' as const,
+      value: settings.alphaDecay,
+      onChange: (v: number) => updateSetting('alphaDecay', v),
+      min: 0.01,
+      max: 0.1,
+      step: 0.01,
+      info: 'How quickly the simulation "cools down" and settles into a stable layout. Lower values make it jitter longer.'
+    }
+  ];
 
   return (
     <div className="absolute inset-0 bg-zinc-950 text-green-500 font-mono flex flex-col z-50">
-      <div className="p-4 border-b border-green-900/50 flex justify-between items-center shrink-0">
-        <h2 className="text-xl font-bold uppercase tracking-wider text-green-400 w-24">Graph</h2>
-        <button
-          onClick={() => setObfuscated(!obfuscated)}
-          className="text-green-400 hover:text-green-300 font-bold tracking-widest px-4 py-1 border border-green-900/50 rounded bg-green-900/20"
-        >
-          {obfuscated ? '*' : '****'}
-        </button>
-        <button onClick={onClose} className="text-zinc-500 hover:text-red-400 font-bold transition-colors w-24 text-right">[ Close ]</button>
-      </div>
+      <CardHeader title="Graph" onClose={onClose} menuOptions={menuOptions} />
       <div className="flex-1 overflow-hidden relative">
-        <GraphVisualizer records={records} obfuscated={obfuscated} />
+        <GraphVisualizer records={records} obfuscated={obfuscated} settings={settings} />
       </div>
     </div>
   );

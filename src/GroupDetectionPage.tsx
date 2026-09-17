@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { ConnectionRecord } from './App';
+import { CardHeader } from './CardHeader';
 import Graph from 'graphology';
 import louvain from 'graphology-communities-louvain';
 
@@ -67,10 +68,7 @@ export function GroupDetectionPage({ records, onClose }: { records: ConnectionRe
 
   return (
     <div className="absolute inset-0 bg-zinc-950 text-green-500 font-mono flex flex-col z-50">
-      <div className="p-4 border-b border-green-900/50 flex justify-between items-center shrink-0">
-        <h2 className="text-xl font-bold uppercase tracking-wider text-green-400">Groups</h2>
-        <button onClick={onClose} className="text-zinc-500 hover:text-red-400 font-bold transition-colors">[ Close ]</button>
-      </div>
+      <CardHeader title="Groups" onClose={onClose} />
       
       <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
         {!groups ? (
