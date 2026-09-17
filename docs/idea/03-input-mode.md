@@ -20,3 +20,6 @@ When active, the screen consists of three main sections occupying the area above
   - Restore the normal bottom navbar.
   - Clear any text currently in the input fields.
 - Returning to input mode reopens the keyboard automatically.
+
+
+*Technical Implementation: See `App.tsx` in [Architecture](../tech/02-architecture.md)*

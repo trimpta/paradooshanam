@@ -37,3 +37,6 @@
   3. Save connection and status.
   4. Clear input.
   5. Prepare for the next record.
+
+
+*Technical Implementation: See `App.tsx` in [Architecture](../tech/02-architecture.md)*

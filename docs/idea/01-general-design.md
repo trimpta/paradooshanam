@@ -5,3 +5,6 @@ The app's UI should generally follow a **terminal-rendered visual philosophy**. 
 
 ## Base URL
 The base URL represents the home page. The app should not explicitly redirect to the home page every time the application opens. The app name is shown on the home page at the base URL, and should not be displayed in the In Page bottom bar.
+
+
+*Technical Implementation: See `App.tsx` in [Architecture](../tech/02-architecture.md)*

@@ -11,3 +11,6 @@ The **In Page** is the page for a graph's records, where the user can view the c
 ## Cards List
 - Existing records list remains.
 - Add one additional card at the **top of the cards list** for Searching and Filtering.
+
+
+*Technical Implementation: See `App.tsx` in [Architecture](../tech/02-architecture.md)*
