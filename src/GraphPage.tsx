@@ -211,6 +211,8 @@ export function GraphVisualizer({ records, obfuscated }: { records: ConnectionRe
     return () => { simulation.stop(); };
   }, [initialData]);
 
+  const zoomRef = useRef<d3.ZoomBehavior<HTMLDivElement, unknown> | null>(null);
+
   useEffect(() => {
     if (!containerRef.current) return;
     const zoom = d3.zoom<HTMLDivElement, unknown>()
@@ -223,10 +225,66 @@ export function GraphVisualizer({ records, obfuscated }: { records: ConnectionRe
         setTransform(e.transform);
       });
     
+    zoomRef.current = zoom;
     d3.select(containerRef.current)
       .call(zoom)
       .on("dblclick.zoom", null);
   }, []);
+
+  // Auto-frame selected node and neighbors
+  useEffect(() => {
+    if (!selectedNodeId || !containerRef.current || !zoomRef.current) return;
+
+    // Use current nodes (we don't add nodes to dependency array to avoid running on every physics tick)
+    const targetNode = nodes.find(n => n.id === selectedNodeId);
+    if (!targetNode || targetNode.x == null || targetNode.y == null) return;
+
+    const coords = [{ x: targetNode.x, y: targetNode.y }];
+    
+    nodes.forEach(n => {
+      if (neighborSet.has(n.id) && n.x != null && n.y != null) {
+        coords.push({ x: n.x, y: n.y });
+      }
+    });
+
+    const minX = Math.min(...coords.map(c => c.x));
+    const maxX = Math.max(...coords.map(c => c.x));
+    const minY = Math.min(...coords.map(c => c.y));
+    const maxY = Math.max(...coords.map(c => c.y));
+
+    const cx = (minX + maxX) / 2;
+    const cy = (minY + maxY) / 2;
+    const w = maxX - minX;
+    const h = maxY - minY;
+
+    const width = containerRef.current.clientWidth;
+    const height = containerRef.current.clientHeight;
+    
+    const padding = 100;
+
+    let scale;
+    if (w === 0 && h === 0) {
+      scale = 2; // Default zoom for isolated node
+    } else {
+      scale = Math.min(
+        (width - padding) / Math.max(1, w),
+        (height - padding) / Math.max(1, h)
+      );
+      scale = Math.max(0.1, Math.min(scale, 4));
+    }
+
+    const transform = d3.zoomIdentity
+      .translate(width / 2, height / 2)
+      .scale(scale)
+      .translate(-cx, -cy);
+
+    d3.select(containerRef.current)
+      .transition()
+      .duration(750)
+      .call(zoomRef.current.transform, transform);
+      
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedNodeId]);
 
   // Pause physics during animation, resume after
   const prevObfuscated = useRef(obfuscated);
