@@ -314,7 +314,7 @@ function NodeLabel({ name, obfuscated }: { name: string, obfuscated: boolean }) 
        }, 50);
     };
 
-    const delay = Math.random() * 200;
+    const delay = Math.random() * 50; // reduced delay for responsiveness
     timeoutId = setTimeout(() => {
       if (obfuscated) {
         runHide();
@@ -329,7 +329,8 @@ function NodeLabel({ name, obfuscated }: { name: string, obfuscated: boolean }) 
     };
   }, [obfuscated, name]);
 
-  return <span ref={spanRef}>{obfuscated ? '*' : `[ ${name} ]`}</span>;
+  const initialText = useRef(obfuscated ? '*' : `[ ${name} ]`);
+  return <span ref={spanRef}>{initialText.current}</span>;
 }
 
 export function GraphPage({ records, onClose }: { records: ConnectionRecord[], onClose: () => void }) {
