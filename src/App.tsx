@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo, KeyboardEvent, TouchEvent } from 'react';
+import { supabase } from './lib/supabase';
 import { Menu } from 'lucide-react';
 import { GraphPage } from './GraphPage';
 import { KeyPeoplePage } from './KeyPeoplePage';
@@ -94,7 +95,7 @@ function useKeyboardState() {
 
 export type Gender = 'M' | 'F' | 'U';
 
-export default function App() {
+export default function App({ graphId, onBack }: { graphId: string, onBack: () => void }) {
   const [names, setNames] = useState<string[]>([]);
   const [records, setRecords] = useState<ConnectionRecord[]>([]);
   const [genders, setGenders] = useState<Record<string, Gender>>({});
@@ -107,6 +108,7 @@ export default function App() {
   const [activeField, setActiveField] = useState<'ONE' | 'TWO'>('ONE');
   const [conflictRecord, setConflictRecord] = useState<ConnectionRecord | null>(null);
   const [mainTab, setMainTab] = useState<'IN' | 'OUT'>('IN');
+  const [activeUsers, setActiveUsers] = useState<number>(0);
   
   // Now explicitly bound to the robust keyboard state
   const isInputMode = isKeyboardOpen;
@@ -114,22 +116,140 @@ export default function App() {
   const inputOneRef = useRef<HTMLInputElement>(null);
   const inputTwoRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    const savedNames = localStorage.getItem('connection-names');
-    const savedRecords = localStorage.getItem('connection-records');
-    const savedGenders = localStorage.getItem('connection-genders');
-    if (savedNames) setNames(JSON.parse(savedNames));
-    if (savedRecords) setRecords(JSON.parse(savedRecords));
-    if (savedGenders) setGenders(JSON.parse(savedGenders));
-  }, []);
+  // Sync map for Name -> UUID
+  const [nodeMap, setNodeMap] = useState<Record<string, string>>({});
 
-  const saveToStorage = (newNames: string[], newRecords: ConnectionRecord[], newGenders: Record<string, Gender>) => {
-    localStorage.setItem('connection-names', JSON.stringify(newNames));
-    localStorage.setItem('connection-records', JSON.stringify(newRecords));
-    localStorage.setItem('connection-genders', JSON.stringify(newGenders));
+  useEffect(() => {
+    async function loadData() {
+      if (!graphId) return;
+      const { data: nodes } = await supabase.from('nodes').select('*').eq('graph_id', graphId);
+      const { data: connections } = await supabase.from('connections').select('*').eq('graph_id', graphId);
+      
+      const newMap: Record<string, string> = {};
+      const newNames: string[] = [];
+      const newGenders: Record<string, Gender> = {};
+      
+      if (nodes) {
+        nodes.forEach(n => {
+          newMap[n.name] = n.id;
+          newNames.push(n.name);
+          newGenders[n.name] = n.gender as Gender;
+        });
+      }
+      
+      // Reverse map for connections
+      const idToName: Record<string, string> = {};
+      if (nodes) nodes.forEach(n => idToName[n.id] = n.name);
+      
+      const newRecords: ConnectionRecord[] = [];
+      if (connections) {
+        connections.forEach(c => {
+          if (idToName[c.person1_id] && idToName[c.person2_id]) {
+            newRecords.push({
+              personOne: idToName[c.person1_id],
+              personTwo: idToName[c.person2_id],
+              score: c.score,
+              relationshipStatus: c.relationship_status as RelationshipStatus
+            });
+          }
+        });
+      }
+      
+      setNodeMap(newMap);
+      setNames(newNames);
+      setGenders(newGenders);
+      setRecords(newRecords);
+    }
+    loadData();
+    
+    // Realtime channel for edits
+    const channel = supabase.channel(`graph-${graphId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'connections', filter: `graph_id=eq.${graphId}` }, () => {
+        loadData();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'nodes', filter: `graph_id=eq.${graphId}` }, () => {
+        loadData();
+      })
+      .subscribe();
+      
+    // Broadcast presence
+    const presenceChannel = supabase.channel('global-presence', {
+      config: { presence: { key: 'user' } }
+    });
+    
+    supabase.auth.getUser().then(({ data: { user } }) => {
+
+      if (user) {
+        presenceChannel.subscribe(async (status) => {
+          if (status === 'SUBSCRIBED') {
+            await presenceChannel.track({ user_id: user.id, active_graph_id: graphId });
+          }
+        });
+        
+        presenceChannel.on('presence', { event: 'sync' }, () => {
+          const state = presenceChannel.presenceState();
+          let count = 0;
+          for (const id in state) {
+            state[id].forEach((presence: any) => {
+              if (presence.active_graph_id === graphId && presence.user_id !== user.id) {
+                count++;
+              }
+            });
+          }
+          setActiveUsers(count);
+        });
+      }
+    });
+
+    return () => {
+      supabase.removeChannel(channel);
+      supabase.removeChannel(presenceChannel);
+    };
+  }, [graphId]);
+
+  const saveToStorage = async (newNames: string[], newRecords: ConnectionRecord[], newGenders: Record<string, Gender>) => {
     setNames(newNames);
     setRecords(newRecords);
     setGenders(newGenders);
+    
+    // Simple backend sync approach for this prototype:
+    // 1. Fetch current nodes
+    const { data: currentNodes } = await supabase.from('nodes').select('id, name').eq('graph_id', graphId);
+    const existingNames = new Set((currentNodes || []).map(n => n.name));
+    
+    // 2. Insert new nodes
+    const nodesToInsert = newNames.filter(n => !existingNames.has(n)).map(n => ({
+      graph_id: graphId,
+      name: n,
+      gender: newGenders[n] || 'U'
+    }));
+    
+    if (nodesToInsert.length > 0) {
+      await supabase.from('nodes').insert(nodesToInsert);
+    }
+    
+    // Re-fetch to get IDs
+    const { data: updatedNodes } = await supabase.from('nodes').select('id, name').eq('graph_id', graphId);
+    const nameToId: Record<string, string> = {};
+    if (updatedNodes) {
+      updatedNodes.forEach(n => nameToId[n.name] = n.id);
+    }
+    
+    // 3. Sync Connections (Wipe and replace for simplicity, or upsert)
+    // Wipe and replace is safer for this prototype
+    await supabase.from('connections').delete().eq('graph_id', graphId);
+    
+    const connectionsToInsert = newRecords.map(r => ({
+      graph_id: graphId,
+      person1_id: nameToId[r.personOne],
+      person2_id: nameToId[r.personTwo],
+      score: r.score,
+      relationship_status: r.relationshipStatus || 'None'
+    })).filter(c => c.person1_id && c.person2_id);
+    
+    if (connectionsToInsert.length > 0) {
+      await supabase.from('connections').insert(connectionsToInsert);
+    }
   };
 
   const handleFocus = (field: 'ONE' | 'TWO') => {
@@ -651,8 +771,15 @@ export default function App() {
       {/* Bottom: Header/Menu OR Score Selector */}
       <div className="shrink-0 flex items-center p-2 gap-4 bg-zinc-900/50 min-h-[5rem]">
         {(!isInputMode || mainTab === 'OUT' || !showAddForm) ? (
-          <div className="w-full flex items-center justify-between px-2 gap-2 h-16">
-            <h1 className="text-base sm:text-lg font-bold uppercase tracking-wider text-green-400 shrink-0">Paradooshanam</h1>
+                    <div className="w-full flex items-center justify-between px-2 gap-2 h-16">
+            <div className="flex flex-col">
+              {activeUsers > 0 && (
+                <div className="text-[10px] font-bold text-green-400 bg-green-900/20 px-1 py-0.5 rounded animate-pulse w-max mb-1">
+                  {activeUsers} user{activeUsers > 1 ? 's' : ''} active
+                </div>
+              )}
+              <h1 className="text-base sm:text-lg font-bold uppercase tracking-wider text-green-400 shrink-0">Paradooshanam</h1>
+            </div>
             
             <div className="flex items-center bg-zinc-950 border border-green-900/50 p-1 shrink-0 rounded-sm">
               <button 
