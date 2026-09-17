@@ -190,7 +190,8 @@ export function DataManagementPage({
             chargeStrength: -200,
             alphaDecay: 0.05,
             traversalMode: 'none',
-            traversalSpeed: 1000
+            traversalSpeed: 1000,
+            minScoreThreshold: 1
           }} />
         </div>
 

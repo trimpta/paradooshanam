@@ -10,6 +10,7 @@ interface Link extends d3.SimulationLinkDatum<Node> {
   source: string | Node;
   target: string | Node;
   score: number;
+  relationshipStatus?: string;
 }
 
 const SYMBOLS = "!@#$%^&*()_+{}|:<>?~-=\\[];',./";
@@ -177,6 +178,7 @@ export interface GraphSettings {
   alphaDecay: number;
   traversalMode: 'none' | 'sequence' | 'random';
   traversalSpeed: number;
+  minScoreThreshold: number;
 }
 
 export function GraphVisualizer({ records, obfuscated, settings, traversalSequence, setTraversalMode }: { records: ConnectionRecord[], obfuscated: boolean, settings: GraphSettings, traversalSequence?: string[], setTraversalMode?: (mode: 'none'|'sequence'|'random') => void }) {
@@ -189,6 +191,7 @@ export function GraphVisualizer({ records, obfuscated, settings, traversalSequen
   const linksRef = useRef<Link[]>([]);
   const nodeElsRef = useRef<Map<string, HTMLDivElement>>(new Map());
   const linkElsRef = useRef<Map<number, SVGLineElement>>(new Map());
+  const symbolElsRef = useRef<Map<number, SVGTextElement>>(new Map());
   const transformRef = useRef<d3.ZoomTransform>(d3.zoomIdentity);
   const svgGroupRef = useRef<SVGGElement>(null);
   const nodeContainerRef = useRef<HTMLDivElement>(null);
@@ -211,12 +214,13 @@ export function GraphVisualizer({ records, obfuscated, settings, traversalSequen
   }, [selectedNodeId, records]);
 
   const initialData = useMemo(() => {
+    const filteredRecords = records.filter(r => r.score >= settings.minScoreThreshold);
     const names = new Set<string>();
-    records.forEach(r => { names.add(r.personOne); names.add(r.personTwo); });
+    filteredRecords.forEach(r => { names.add(r.personOne); names.add(r.personTwo); });
     const nodesData = Array.from(names).map(name => ({ id: name }));
-    const linksData = records.map(r => ({ source: r.personOne, target: r.personTwo, score: r.score }));
+    const linksData = filteredRecords.map(r => ({ source: r.personOne, target: r.personTwo, score: r.score, relationshipStatus: r.relationshipStatus }));
     return { nodesData, linksData };
-  }, [records]);
+  }, [records, settings.minScoreThreshold]);
 
   // --- Simulation setup: runs once per data change ---
   useEffect(() => {
@@ -231,6 +235,7 @@ export function GraphVisualizer({ records, obfuscated, settings, traversalSequen
     linksRef.current = simLinks;
     nodeElsRef.current.clear();
     linkElsRef.current.clear();
+    symbolElsRef.current.clear();
 
     // Hide node container until first tick positions everything (prevents flash at 0,0)
     if (nodeContainerRef.current) nodeContainerRef.current.style.opacity = '0';
@@ -266,6 +271,14 @@ export function GraphVisualizer({ records, obfuscated, settings, traversalSequen
             el.setAttribute('y1', String(src.y));
             el.setAttribute('x2', String(tgt.x));
             el.setAttribute('y2', String(tgt.y));
+            
+            const textEl = symbolElsRef.current.get(j);
+            if (textEl) {
+              const midX = (src.x + tgt.x) / 2;
+              const midY = (src.y + tgt.y) / 2;
+              textEl.setAttribute('x', String(midX));
+              textEl.setAttribute('y', String(midY));
+            }
           }
         }
         // Reveal container after first tick
@@ -580,15 +593,45 @@ export function GraphVisualizer({ records, obfuscated, settings, traversalSequen
               const tgtId = typeof link.target === 'object' ? (link.target as Node).id : String(link.target);
               const isFaded = selectedNodeId ? (srcId !== selectedNodeId && tgtId !== selectedNodeId) : false;
 
+              let strokeColor = '#22c55e'; // default green
+              let symbolText = '';
+              let symbolColor = '';
+
+              if (link.relationshipStatus === 'In a Relationship') {
+                strokeColor = '#ff69b4';
+                symbolText = '<3';
+                symbolColor = '#ff69b4';
+              } else if (link.relationshipStatus === 'Complicated') {
+                strokeColor = '#8b0000';
+                symbolText = '</3';
+                symbolColor = '#8b0000';
+              } else if (link.relationshipStatus === 'Talking Stage') {
+                strokeColor = '#00bfff';
+                symbolText = '^_^';
+                symbolColor = '#00bfff';
+              }
+
               return (
-                <line
-                  key={i}
-                  ref={el => { if (el) linkElsRef.current.set(i, el); }}
-                  stroke="#22c55e"
-                  strokeWidth={Math.max(0.5, link.score / 2)}
-                  strokeOpacity={isFaded ? 0.05 : 0.2 + (link.score / 10) * 0.8}
-                  className="transition-[stroke-opacity] duration-300"
-                />
+                <g key={i} className="transition-[opacity] duration-300" style={{ opacity: isFaded ? 0.05 : 1 }}>
+                  <line
+                    ref={el => { if (el) linkElsRef.current.set(i, el); }}
+                    stroke={strokeColor}
+                    strokeWidth={Math.max(0.5, link.score / 2)}
+                    strokeOpacity={0.2 + (link.score / 10) * 0.8}
+                  />
+                  {symbolText && (
+                    <text
+                      ref={el => { if (el) symbolElsRef.current.set(i, el); }}
+                      fill={symbolColor}
+                      fontSize="14"
+                      fontWeight="bold"
+                      textAnchor="middle"
+                      dominantBaseline="middle"
+                    >
+                      {symbolText}
+                    </text>
+                  )}
+                </g>
               );
             })}
           </g>
@@ -658,7 +701,8 @@ export function GraphPage({ records, onClose }: { records: ConnectionRecord[], o
     chargeStrength: -200,
     alphaDecay: 0.05,
     traversalMode: 'none',
-    traversalSpeed: 1000
+    traversalSpeed: 1000,
+    minScoreThreshold: 1
   });
 
   const [traversalSequence, setTraversalSequence] = useState<string[]>([]);
@@ -741,6 +785,17 @@ export function GraphPage({ records, onClose }: { records: ConnectionRecord[], o
       max: 0.1,
       step: 0.01,
       info: 'How quickly the simulation "cools down" and settles into a stable layout. Lower values make it jitter longer.'
+    },
+    {
+      id: 'minScore',
+      label: 'Minimum Score Filter',
+      type: 'slider' as const,
+      value: settings.minScoreThreshold,
+      onChange: (v: number) => updateSetting('minScoreThreshold', v),
+      min: 1,
+      max: 10,
+      step: 1,
+      info: 'Filters out connections with a score below this threshold.'
     }
   ];
 

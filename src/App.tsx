@@ -6,11 +6,16 @@ import { GroupDetectionPage } from './GroupDetectionPage';
 import { PersonEditorPage } from './PersonEditorPage';
 import { GenderAnalysisPage } from './GenderAnalysisPage';
 import { DataManagementPage } from './DataManagementPage';
+import { RelationshipStatusPage } from './RelationshipStatusPage';
+
+
+export type RelationshipStatus = 'None' | 'Talking Stage' | 'Complicated' | 'In a Relationship';
 
 export interface ConnectionRecord {
   personOne: string;
   personTwo: string;
   score: number;
+  relationshipStatus?: RelationshipStatus;
 }
 
 export function fuzzyMatch(pattern: string, str: string): boolean {
@@ -98,6 +103,7 @@ export default function App() {
   const [personOne, setPersonOne] = useState('');
   const [personTwo, setPersonTwo] = useState('');
   const [score, setScore] = useState(5);
+  const [relationshipStatus, setRelationshipStatus] = useState<RelationshipStatus>('None');
   const [activeField, setActiveField] = useState<'ONE' | 'TWO'>('ONE');
   const [conflictRecord, setConflictRecord] = useState<ConnectionRecord | null>(null);
   const [mainTab, setMainTab] = useState<'IN' | 'OUT'>('IN');
@@ -180,6 +186,7 @@ export default function App() {
     setPersonOne('');
     setPersonTwo('');
     setScore(5);
+    setRelationshipStatus('None');
     setConflictRecord(null);
     inputOneRef.current?.focus();
   };
@@ -209,14 +216,14 @@ export default function App() {
     if (existing) {
       setConflictRecord(existing);
     } else {
-      commitSave({ personOne: p1, personTwo: p2, score });
+      commitSave({ personOne: p1, personTwo: p2, score, relationshipStatus });
       clearFormAndFocus();
     }
   };
 
   const handleUpdate = () => {
     if (!conflictRecord) return;
-    const newRecord = { personOne: personOne.trim(), personTwo: personTwo.trim(), score };
+    const newRecord = { personOne: personOne.trim(), personTwo: personTwo.trim(), score, relationshipStatus };
     const updatedRecords = records.map(r => 
       (r.personOne === conflictRecord.personOne && r.personTwo === conflictRecord.personTwo) ? newRecord : r
     );
@@ -231,7 +238,7 @@ export default function App() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [showExportPage, setShowExportPage] = useState(false);
   const [showPersonEditor, setShowPersonEditor] = useState(false);
-  const [activeOutTool, setActiveOutTool] = useState<'GRAPH' | 'PEOPLE' | 'GROUPS' | 'GENDER' | null>(null);
+  const [activeOutTool, setActiveOutTool] = useState<'GRAPH' | 'PEOPLE' | 'GROUPS' | 'GENDER' | 'RELATIONSHIPS' | null>(null);
   const [selectedMenuIdx, setSelectedMenuIdx] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
   const [showAddForm, setShowAddForm] = useState(false);
@@ -274,6 +281,7 @@ export default function App() {
 
   const [editingRecord, setEditingRecord] = useState<ConnectionRecord | null>(null);
   const [editingScore, setEditingScore] = useState(5);
+  const [editingRelationshipStatus, setEditingRelationshipStatus] = useState<RelationshipStatus>('None');
 
   const handleDelete = (r: ConnectionRecord) => {
     const updated = records.filter(rec => rec !== r);
@@ -283,11 +291,12 @@ export default function App() {
   const handleStartEdit = (r: ConnectionRecord) => {
     setEditingRecord(r);
     setEditingScore(r.score);
+    setEditingRelationshipStatus(r.relationshipStatus || 'None');
   };
 
   const handleSaveEdit = () => {
     if (!editingRecord) return;
-    const updated = records.map(r => r === editingRecord ? { ...r, score: editingScore } : r);
+    const updated = records.map(r => r === editingRecord ? { ...r, score: editingScore, relationshipStatus: editingRelationshipStatus } : r);
     saveToStorage(names, updated, genders);
     setEditingRecord(null);
   };
@@ -352,6 +361,7 @@ export default function App() {
   if (activeOutTool === 'PEOPLE') return <KeyPeoplePage records={records} onClose={() => setActiveOutTool(null)} />;
   if (activeOutTool === 'GROUPS') return <GroupDetectionPage records={records} onClose={() => setActiveOutTool(null)} />;
   if (activeOutTool === 'GENDER') return <GenderAnalysisPage names={names} genders={genders} records={records} onClose={() => setActiveOutTool(null)} />;
+  if (activeOutTool === 'RELATIONSHIPS') return <RelationshipStatusPage records={records} onClose={() => setActiveOutTool(null)} />;
 
   const filteredRecords = records.filter(r => 
     fuzzyMatch(searchQuery, r.personOne) || 
@@ -428,9 +438,11 @@ export default function App() {
               {editingRecord.personOne} <span className="text-green-900">—</span> {editingRecord.personTwo}
             </div>
             
-            <div className="w-full relative overflow-hidden bg-zinc-950 rounded border border-green-900/50 h-16 mb-8">
+            <div className="w-full relative overflow-hidden bg-zinc-950 rounded border border-green-900/50 h-16 mb-4">
               <ScoreSelector score={editingScore} onChange={setEditingScore} />
             </div>
+            
+            <RelationshipStatusSelector status={editingRelationshipStatus} onChange={setEditingRelationshipStatus} />
             
             <div className="flex gap-4 mt-8 w-full justify-center">
               <button 
@@ -621,14 +633,25 @@ export default function App() {
               <h3 className="text-green-400 font-bold text-sm sm:text-base mb-1 group-hover:text-green-300">Gender Patterns</h3>
               <p className="text-zinc-500 text-xs sm:text-sm font-bold hidden sm:block">Homophily and class composition</p>
             </button>
+            <button 
+              onClick={() => setActiveOutTool('RELATIONSHIPS')}
+              className="bg-zinc-900 border border-green-900/50 p-4 rounded flex flex-col items-start hover:border-green-500 transition-colors text-left group"
+            >
+              <pre className="text-green-600 font-mono text-[10px] leading-tight mb-3">
+{` <3
+ </3`}
+              </pre>
+              <h3 className="text-green-400 font-bold text-sm sm:text-base mb-1 group-hover:text-green-300">Relationships</h3>
+              <p className="text-zinc-500 text-xs sm:text-sm font-bold hidden sm:block">Relationship status distribution</p>
+            </button>
           </div>
         </div>
       )}
 
       {/* Bottom: Header/Menu OR Score Selector */}
-      <div className="shrink-0 h-20 flex items-center p-2 gap-4 bg-zinc-900/50">
+      <div className="shrink-0 flex items-center p-2 gap-4 bg-zinc-900/50 min-h-[5rem]">
         {(!isInputMode || mainTab === 'OUT' || !showAddForm) ? (
-          <div className="w-full flex items-center justify-between px-2 gap-2">
+          <div className="w-full flex items-center justify-between px-2 gap-2 h-16">
             <h1 className="text-base sm:text-lg font-bold uppercase tracking-wider text-green-400 shrink-0">Paradooshanam</h1>
             
             <div className="flex items-center bg-zinc-950 border border-green-900/50 p-1 shrink-0 rounded-sm">
@@ -656,19 +679,22 @@ export default function App() {
             </div>
           </div>
         ) : (
-          <>
-            <div className="flex-1 h-full relative overflow-hidden bg-zinc-950 rounded border border-green-900/50">
-              <ScoreSelector score={score} onChange={setScore} />
+          <div className="flex-1 flex flex-col sm:flex-row gap-2">
+            <div className="flex-1 flex flex-col gap-2">
+              <div className="h-16 relative overflow-hidden bg-zinc-950 rounded border border-green-900/50">
+                <ScoreSelector score={score} onChange={setScore} />
+              </div>
+              <RelationshipStatusSelector status={relationshipStatus} onChange={setRelationshipStatus} />
             </div>
             <button
               onClick={(e) => { e.preventDefault(); handleSave(); }}
               onPointerDown={(e) => e.preventDefault()}
               disabled={!personOne.trim() || !personTwo.trim() || !!conflictRecord}
-              className="h-full px-6 text-green-500 hover:text-green-300 font-bold flex items-center justify-center disabled:opacity-30 transition-colors"
+              className="px-6 h-16 sm:h-auto text-green-500 hover:text-green-300 font-bold flex items-center justify-center disabled:opacity-30 transition-colors border border-green-900/50 bg-zinc-950 rounded sm:mt-0"
             >
               [ OK ]
             </button>
-          </>
+          </div>
         )}
       </div>
     </div>
@@ -816,6 +842,32 @@ function TerminalAutocomplete({
             </div>
           );
         })}
+      </div>
+    </div>
+  );
+}
+
+function RelationshipStatusSelector({
+  status,
+  onChange
+}: {
+  status: RelationshipStatus;
+  onChange: (s: RelationshipStatus) => void;
+}) {
+  const options: RelationshipStatus[] = ['None', 'Talking Stage', 'Complicated', 'In a Relationship'];
+  return (
+    <div className="flex flex-col w-full py-2 text-sm text-green-500 gap-1 mt-2 mb-2">
+      <div className="text-zinc-500 text-xs font-bold uppercase mb-1 flex-shrink-0">Status</div>
+      <div className="flex flex-wrap gap-2">
+        {options.map(opt => (
+          <button
+            key={opt}
+            onClick={(e) => { e.preventDefault(); onChange(opt); }}
+            className={`px-2 py-1 text-xs border rounded font-bold transition-colors ${status === opt ? 'bg-green-400 text-zinc-950 border-green-400' : 'border-green-900/50 text-green-700 hover:text-green-400'}`}
+          >
+            {opt}
+          </button>
+        ))}
       </div>
     </div>
   );
