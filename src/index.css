@@ -10,3 +10,27 @@
     @apply h-full w-full;
   }
 }
+
+@keyframes node-scramble-out {
+  0%   { filter: blur(0px);   opacity: 1;   letter-spacing: normal; }
+  30%  { filter: blur(3px);   opacity: 0.6; letter-spacing: 0.15em; }
+  55%  { filter: blur(6px);   opacity: 0.1; letter-spacing: 0.3em;  }
+  56%  { filter: blur(6px);   opacity: 0;                           }
+  57%  { filter: blur(6px);   opacity: 0;                           }
+  75%  { filter: blur(3px);   opacity: 0.6; letter-spacing: 0;      }
+  100% { filter: blur(0px);   opacity: 1;   letter-spacing: normal; }
+}
+
+@keyframes node-scramble-in {
+  0%   { filter: blur(6px);   opacity: 0;   letter-spacing: 0.3em;  }
+  30%  { filter: blur(3px);   opacity: 0.6; letter-spacing: 0.1em;  }
+  100% { filter: blur(0px);   opacity: 1;   letter-spacing: normal; }
+}
+
+.node-label-scrambling {
+  animation: node-scramble-out 0.55s ease-in-out forwards;
+}
+
+.node-label-unscrambling {
+  animation: node-scramble-in 0.35s ease-out forwards;
+}

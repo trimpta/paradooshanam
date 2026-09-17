@@ -201,137 +201,42 @@ export function GraphVisualizer({ records, obfuscated }: { records: ConnectionRe
   );
 }
 
-const SYMBOLS = "!@#$%^&*()_+{}|:<>?~-=\\[];',./";
 
 function NodeLabel({ name, obfuscated }: { name: string, obfuscated: boolean }) {
   const spanRef = useRef<HTMLSpanElement>(null);
-  
+  // Track the last obfuscated value we've already animated so we don't re-fire
+  const prevObfuscated = useRef(obfuscated);
+
   useEffect(() => {
     const el = spanRef.current;
-    if (!el) return;
+    if (!el || prevObfuscated.current === obfuscated) return;
+    prevObfuscated.current = obfuscated;
 
-    if (obfuscated && el.textContent === '*') return;
-    if (!obfuscated && el.textContent === `[ ${name} ]`) return;
-
-    let timeoutId: any;
-    let intervalId: any;
-
-    const runHide = () => {
-      let step = 0;
-      let currentStr = `[ ${name} ]`;
-      
-      intervalId = setInterval(() => {
-        step++;
-        if (!spanRef.current) { clearInterval(intervalId); return; }
-
-        if (step <= 15) {
-           let arr = currentStr.split('');
-           for (let i = 1; i < arr.length - 1; i++) {
-             if (Math.random() > 0.6) {
-               arr[i] = SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)];
-             }
-           }
-           if (!arr.includes('*')) {
-              arr[Math.floor(Math.random() * (arr.length - 2)) + 1] = '*';
-           }
-           currentStr = arr.join('');
-           spanRef.current.textContent = currentStr;
-        } else if (step <= 30) {
-           let arr = currentStr.split('');
-           if (arr.length > 3) {
-             let candidates = [];
-             for(let i=1; i<arr.length-1; i++) {
-                if (arr[i] !== '*') candidates.push(i);
-             }
-             if (candidates.length > 0) {
-                const removeCount = Math.min(candidates.length, Math.random() > 0.5 ? 2 : 1);
-                for (let k = 0; k < removeCount; k++) {
-                   const removeIdx = candidates[Math.floor(Math.random() * candidates.length)];
-                   arr.splice(removeIdx, 1);
-                   candidates = [];
-                   for(let i=1; i<arr.length-1; i++) {
-                      if (arr[i] !== '*') candidates.push(i);
-                   }
-                }
-             } else {
-                arr.splice(1, 1);
-             }
-             currentStr = arr.join('');
-             spanRef.current.textContent = currentStr;
-           } else {
-             currentStr = '[ * ]';
-             spanRef.current.textContent = currentStr;
-           }
-        } else {
-           clearInterval(intervalId);
-           spanRef.current.textContent = '*';
-        }
-      }, 50);
-    };
-
-    const runShow = () => {
-       let step = 0;
-       let currentStr = `[ * ]`;
-       if (spanRef.current) spanRef.current.textContent = currentStr;
-       const targetInnerLen = name.length + 2;
-       
-       intervalId = setInterval(() => {
-         step++;
-         if (!spanRef.current) { clearInterval(intervalId); return; }
-
-         if (step <= 15) {
-           let arr = currentStr.split('');
-           if (arr.length - 2 < targetInnerLen) {
-             const addCount = Math.min(targetInnerLen - (arr.length - 2), Math.random() > 0.5 ? 2 : 1);
-             for(let k=0; k<addCount; k++) {
-                const insertIdx = Math.floor(Math.random() * (arr.length - 2)) + 1;
-                arr.splice(insertIdx, 0, SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)]);
-             }
-           }
-           currentStr = arr.join('');
-           spanRef.current.textContent = currentStr;
-         } else if (step <= 30) {
-           let arr = currentStr.split('');
-           while (arr.length < targetInnerLen + 2) arr.splice(1, 0, 'X');
-           while (arr.length > targetInnerLen + 2) arr.splice(1, 1);
-           
-           const targetArr = `[ ${name} ]`.split('');
-           for (let i = 1; i < arr.length - 1; i++) {
-             if (arr[i] !== targetArr[i]) {
-                if (Math.random() > 0.5) {
-                   arr[i] = targetArr[i];
-                } else {
-                   arr[i] = SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)];
-                }
-             }
-           }
-           currentStr = arr.join('');
-           spanRef.current.textContent = currentStr;
-         } else {
-           clearInterval(intervalId);
-           spanRef.current.textContent = `[ ${name} ]`;
-         }
-       }, 50);
-    };
-
-    const delay = Math.random() * 50; // reduced delay for responsiveness
-    timeoutId = setTimeout(() => {
-      if (obfuscated) {
-        runHide();
-      } else {
-        runShow();
-      }
-    }, delay);
-
-    return () => {
-      clearTimeout(timeoutId);
-      clearInterval(intervalId);
-    };
+    if (obfuscated) {
+      // Scramble out → swap text at blur peak → reveal as *
+      el.classList.remove('node-label-unscrambling');
+      el.classList.add('node-label-scrambling');
+      // At 56% of 550ms ≈ 308ms the text is fully blurred/invisible → swap
+      const t = setTimeout(() => {
+        if (spanRef.current) spanRef.current.textContent = '*';
+      }, 310 + Math.random() * 60); // tiny jitter for chaotic feel
+      return () => clearTimeout(t);
+    } else {
+      // Instantly set text, then animate in
+      el.textContent = `[ ${name} ]`;
+      el.classList.remove('node-label-scrambling');
+      el.classList.add('node-label-unscrambling');
+      const t = setTimeout(() => {
+        if (spanRef.current) spanRef.current.classList.remove('node-label-unscrambling');
+      }, 400);
+      return () => clearTimeout(t);
+    }
   }, [obfuscated, name]);
 
   const initialText = useRef(obfuscated ? '*' : `[ ${name} ]`);
   return <span ref={spanRef}>{initialText.current}</span>;
 }
+
 
 export function GraphPage({ records, onClose }: { records: ConnectionRecord[], onClose: () => void }) {
   const [obfuscated, setObfuscated] = useState(false);
