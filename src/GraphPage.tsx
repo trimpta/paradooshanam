@@ -211,31 +211,39 @@ export function GraphVisualizer({ records, obfuscated }: { records: ConnectionRe
     // Hide node container until first tick positions everything (prevents flash at 0,0)
     if (nodeContainerRef.current) nodeContainerRef.current.style.opacity = '0';
     let firstTick = true;
+    let tickCount = 0;
 
     const simulation = d3.forceSimulation<Node, Link>(simNodes)
       .force("link", d3.forceLink<Node, Link>(simLinks).id(d => d.id).distance(d => (11 - d.score) * 20))
-      .force("charge", d3.forceManyBody().strength(-300))
+      .force("charge", d3.forceManyBody().strength(-200).theta(1.5))
       .force("center", d3.forceCenter(width / 2, height / 2))
+      .alphaDecay(0.05)
       .on("tick", () => {
+        // Throttle DOM writes to every other tick (~30fps visual, 60fps physics)
+        tickCount++;
+        if (tickCount % 2 !== 0 && !firstTick) return;
+
         // --- Direct DOM updates: ZERO React re-renders ---
-        simNodes.forEach(node => {
-          if (node.x == null || node.y == null) return;
+        for (let j = 0; j < simNodes.length; j++) {
+          const node = simNodes[j];
+          if (node.x == null || node.y == null) continue;
           const el = nodeElsRef.current.get(node.id);
           if (el) {
-            el.style.transform = `translate(${node.x}px, ${node.y}px) translate(-50%, -50%)`;
+            el.style.transform = `translate3d(${node.x}px, ${node.y}px, 0) translate(-50%, -50%)`;
           }
-        });
-        simLinks.forEach((link, i) => {
+        }
+        for (let j = 0; j < simLinks.length; j++) {
+          const link = simLinks[j];
           const src = link.source as Node;
           const tgt = link.target as Node;
-          const el = linkElsRef.current.get(i);
+          const el = linkElsRef.current.get(j);
           if (el && src.x != null && src.y != null && tgt.x != null && tgt.y != null) {
             el.setAttribute('x1', String(src.x));
             el.setAttribute('y1', String(src.y));
             el.setAttribute('x2', String(tgt.x));
             el.setAttribute('y2', String(tgt.y));
           }
-        });
+        }
         // Reveal container after first tick
         if (firstTick && nodeContainerRef.current) {
           nodeContainerRef.current.style.opacity = '1';
@@ -406,14 +414,10 @@ export function GraphVisualizer({ records, obfuscated }: { records: ConnectionRe
             <pattern
               ref={patternRef}
               id="asciiGrid"
-              width="60" height="40"
+              width="40" height="40"
               patternUnits="userSpaceOnUse"
             >
-              <text x="0" y="15" fill="rgba(34, 197, 94, 0.2)" fontSize="14" fontFamily="monospace">+</text>
-              <text x="15" y="15" fill="rgba(34, 197, 94, 0.15)" fontSize="14" fontFamily="monospace">_</text>
-              <text x="30" y="15" fill="rgba(34, 197, 94, 0.15)" fontSize="14" fontFamily="monospace">_</text>
-              <text x="45" y="15" fill="rgba(34, 197, 94, 0.15)" fontSize="14" fontFamily="monospace">_</text>
-              <text x="0" y="35" fill="rgba(34, 197, 94, 0.15)" fontSize="14" fontFamily="monospace">|</text>
+              <rect x="0" y="0" width="1" height="1" fill="rgba(34, 197, 94, 0.15)" />
             </pattern>
           </defs>
           <rect width="100%" height="100%" fill="url(#asciiGrid)" />
@@ -439,7 +443,7 @@ export function GraphVisualizer({ records, obfuscated }: { records: ConnectionRe
 
         <div
           ref={nodeContainerRef}
-          className="absolute inset-0 pointer-events-none"
+          className="absolute inset-0 pointer-events-none will-change-transform"
           style={{ transformOrigin: '0 0' }}
         >
           {renderNodes.map((node, idx) => {
@@ -453,7 +457,7 @@ export function GraphVisualizer({ records, obfuscated }: { records: ConnectionRe
                 key={node.id}
                 ref={el => { if (el) nodeElsRef.current.set(node.id, el); }}
                 style={{ opacity: isFaded ? 0.3 : 1 }}
-                className={`d3-node absolute px-1 font-bold text-xs cursor-grab active:cursor-grabbing pointer-events-auto select-none border shadow-[0_0_10px_rgba(0,0,0,0.8)] rounded-sm transition-[color,background-color,border-color,opacity,box-shadow] duration-300 ${isSelected ? 'bg-green-400 text-zinc-950 border-green-400 z-10' : 'bg-zinc-950 text-green-400 border-green-900/30'}`}
+                className={`d3-node absolute px-1 font-bold text-xs cursor-grab active:cursor-grabbing pointer-events-auto select-none border rounded-sm will-change-transform transition-[color,background-color,border-color,opacity] duration-300 ${isSelected ? 'bg-green-400 text-zinc-950 border-green-400 z-10' : 'bg-zinc-950 text-green-400 border-green-900/30'}`}
                 onPointerDown={(e) => handlePointerDown(e, node)}
                 onPointerMove={handlePointerMove}
                 onPointerUp={handlePointerUp}
