@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useMemo } from 'react';
+import { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import { ConnectionRecord } from './App';
 import * as d3 from 'd3';
 
@@ -15,8 +15,6 @@ interface Link extends d3.SimulationLinkDatum<Node> {
 const SYMBOLS = "!@#$%^&*()_+{}|:<>?~-=\\[];',./";
 
 // --- Shared single animation loop for all node labels ---
-// Each registered node gets a ref to its span and a target state.
-// One setInterval drives all of them — zero per-node timers.
 type NodeAnimEntry = {
   el: HTMLSpanElement;
   name: string;
@@ -25,7 +23,7 @@ type NodeAnimEntry = {
   step: number;
   totalSteps: number;
   phase: 'scramble' | 'collapse' | 'expand' | 'unscramble' | 'done';
-  startAt: number; // timestamp when this node's animation begins
+  startAt: number;
 };
 
 let animRegistry: Map<string, NodeAnimEntry> = new Map();
@@ -39,14 +37,13 @@ function runSharedLoop() {
 
     animRegistry.forEach((entry) => {
       if (!entry.el || !entry.el.isConnected) return;
-      if (now < entry.startAt) { anyActive = true; return; } // not started yet
+      if (now < entry.startAt) { anyActive = true; return; }
       if (entry.phase === 'done') return;
 
       anyActive = true;
       entry.step++;
 
       if (entry.targetObfuscated) {
-        // --- HIDE: scramble then collapse ---
         if (entry.phase === 'scramble') {
           const arr = entry.currentStr.split('');
           for (let i = 1; i < arr.length - 1; i++) {
@@ -80,7 +77,6 @@ function runSharedLoop() {
           }
         }
       } else {
-        // --- SHOW: expand then unscramble ---
         const target = `[ ${entry.name} ]`;
         if (entry.phase === 'expand') {
           const arr = entry.currentStr.split('');
@@ -97,7 +93,6 @@ function runSharedLoop() {
         } else if (entry.phase === 'unscramble') {
           const arr = entry.currentStr.split('');
           const targetArr = target.split('');
-          // Clamp length
           while (arr.length < targetArr.length) arr.push(' ');
           while (arr.length > targetArr.length) arr.splice(arr.length - 2, 1);
           let changed = 0;
@@ -144,14 +139,12 @@ function scheduleNodeAnim(
     startAt: Date.now() + delayMs,
   };
 
-  // For show animation, start from [ * ] if coming from *
   if (!targetObfuscated) {
     entry.currentStr = '[ * ]';
     el.textContent = '[ * ]';
   }
 
   if (existing) {
-    // Override in place — el ref stays the same
     Object.assign(existing, entry);
   } else {
     animRegistry.set(name, entry);
@@ -164,23 +157,34 @@ function scheduleNodeAnim(
 
 export function GraphVisualizer({ records, obfuscated }: { records: ConnectionRecord[], obfuscated: boolean }) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [nodes, setNodes] = useState<Node[]>([]);
-  const [links, setLinks] = useState<Link[]>([]);
   const simRef = useRef<d3.Simulation<Node, Link> | null>(null);
-  const [transform, setTransform] = useState<d3.ZoomTransform>(d3.zoomIdentity);
-  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const zoomRef = useRef<d3.ZoomBehavior<HTMLDivElement, unknown> | null>(null);
 
+  // Direct DOM refs — bypass React for physics and zoom
+  const nodesRef = useRef<Node[]>([]);
+  const linksRef = useRef<Link[]>([]);
+  const nodeElsRef = useRef<Map<string, HTMLDivElement>>(new Map());
+  const linkElsRef = useRef<Map<number, SVGLineElement>>(new Map());
+  const transformRef = useRef<d3.ZoomTransform>(d3.zoomIdentity);
+  const svgGroupRef = useRef<SVGGElement>(null);
+  const nodeContainerRef = useRef<HTMLDivElement>(null);
+  const patternRef = useRef<SVGPatternElement>(null);
+
+  // State — only for things that genuinely need a React re-render
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [renderNodes, setRenderNodes] = useState<Node[]>([]);
+  const [renderLinks, setRenderLinks] = useState<Link[]>([]);
+
+  // Compute neighbor set from source records, not from simulation link state
   const neighborSet = useMemo(() => {
     if (!selectedNodeId) return new Set<string>();
     const set = new Set<string>();
-    links.forEach(l => {
-      const srcId = typeof l.source === 'object' ? l.source.id : l.source;
-      const tgtId = typeof l.target === 'object' ? l.target.id : l.target;
-      if (srcId === selectedNodeId) set.add(tgtId);
-      if (tgtId === selectedNodeId) set.add(srcId);
+    records.forEach(r => {
+      if (r.personOne === selectedNodeId) set.add(r.personTwo);
+      if (r.personTwo === selectedNodeId) set.add(r.personOne);
     });
     return set;
-  }, [selectedNodeId, links]);
+  }, [selectedNodeId, records]);
 
   const initialData = useMemo(() => {
     const names = new Set<string>();
@@ -190,29 +194,65 @@ export function GraphVisualizer({ records, obfuscated }: { records: ConnectionRe
     return { nodesData, linksData };
   }, [records]);
 
+  // --- Simulation setup: runs once per data change ---
   useEffect(() => {
     if (!containerRef.current) return;
     const width = containerRef.current.clientWidth;
     const height = containerRef.current.clientHeight;
 
-    const simNodes = initialData.nodesData.map(d => ({ ...d }));
-    const simLinks = initialData.linksData.map(d => ({ ...d }));
+    const simNodes = initialData.nodesData.map(d => ({ ...d })) as Node[];
+    const simLinks = initialData.linksData.map(d => ({ ...d })) as Link[];
 
-    const simulation = d3.forceSimulation<Node, Link>(simNodes as Node[])
-      .force("link", d3.forceLink<Node, Link>(simLinks as Link[]).id(d => d.id).distance(d => (11 - d.score) * 20))
+    nodesRef.current = simNodes;
+    linksRef.current = simLinks;
+    nodeElsRef.current.clear();
+    linkElsRef.current.clear();
+
+    // Hide node container until first tick positions everything (prevents flash at 0,0)
+    if (nodeContainerRef.current) nodeContainerRef.current.style.opacity = '0';
+    let firstTick = true;
+
+    const simulation = d3.forceSimulation<Node, Link>(simNodes)
+      .force("link", d3.forceLink<Node, Link>(simLinks).id(d => d.id).distance(d => (11 - d.score) * 20))
       .force("charge", d3.forceManyBody().strength(-300))
       .force("center", d3.forceCenter(width / 2, height / 2))
       .on("tick", () => {
-        setNodes([...simNodes]);
-        setLinks([...simLinks]);
+        // --- Direct DOM updates: ZERO React re-renders ---
+        simNodes.forEach(node => {
+          if (node.x == null || node.y == null) return;
+          const el = nodeElsRef.current.get(node.id);
+          if (el) {
+            el.style.transform = `translate(${node.x}px, ${node.y}px) translate(-50%, -50%)`;
+          }
+        });
+        simLinks.forEach((link, i) => {
+          const src = link.source as Node;
+          const tgt = link.target as Node;
+          const el = linkElsRef.current.get(i);
+          if (el && src.x != null && src.y != null && tgt.x != null && tgt.y != null) {
+            el.setAttribute('x1', String(src.x));
+            el.setAttribute('y1', String(src.y));
+            el.setAttribute('x2', String(tgt.x));
+            el.setAttribute('y2', String(tgt.y));
+          }
+        });
+        // Reveal container after first tick
+        if (firstTick && nodeContainerRef.current) {
+          nodeContainerRef.current.style.opacity = '1';
+          firstTick = false;
+        }
       });
 
     simRef.current = simulation;
+
+    // Trigger ONE re-render to create the DOM elements
+    setRenderNodes([...simNodes]);
+    setRenderLinks([...simLinks]);
+
     return () => { simulation.stop(); };
   }, [initialData]);
 
-  const zoomRef = useRef<d3.ZoomBehavior<HTMLDivElement, unknown> | null>(null);
-
+  // --- Zoom setup: direct DOM updates, no React state ---
   useEffect(() => {
     if (!containerRef.current) return;
     const zoom = d3.zoom<HTMLDivElement, unknown>()
@@ -222,26 +262,35 @@ export function GraphVisualizer({ records, obfuscated }: { records: ConnectionRe
         return !e.target.closest('.d3-node');
       })
       .on("zoom", (e) => {
-        setTransform(e.transform);
+        transformRef.current = e.transform;
+        const t = e.transform;
+        if (svgGroupRef.current) {
+          svgGroupRef.current.setAttribute('transform', `translate(${t.x},${t.y}) scale(${t.k})`);
+        }
+        if (nodeContainerRef.current) {
+          nodeContainerRef.current.style.transform = `translate(${t.x}px, ${t.y}px) scale(${t.k})`;
+        }
+        if (patternRef.current) {
+          patternRef.current.setAttribute('patternTransform', `translate(${t.x}, ${t.y}) scale(${t.k})`);
+        }
       });
-    
+
     zoomRef.current = zoom;
     d3.select(containerRef.current)
       .call(zoom)
       .on("dblclick.zoom", null);
   }, []);
 
-  // Auto-frame selected node and neighbors
+  // --- Auto-frame selected node and neighbors ---
   useEffect(() => {
     if (!selectedNodeId || !containerRef.current || !zoomRef.current) return;
 
-    // Use current nodes (we don't add nodes to dependency array to avoid running on every physics tick)
-    const targetNode = nodes.find(n => n.id === selectedNodeId);
+    const currentNodes = nodesRef.current;
+    const targetNode = currentNodes.find(n => n.id === selectedNodeId);
     if (!targetNode || targetNode.x == null || targetNode.y == null) return;
 
     const coords = [{ x: targetNode.x, y: targetNode.y }];
-    
-    nodes.forEach(n => {
+    currentNodes.forEach(n => {
       if (neighborSet.has(n.id) && n.x != null && n.y != null) {
         coords.push({ x: n.x, y: n.y });
       }
@@ -259,12 +308,11 @@ export function GraphVisualizer({ records, obfuscated }: { records: ConnectionRe
 
     const width = containerRef.current.clientWidth;
     const height = containerRef.current.clientHeight;
-    
     const padding = 100;
 
     let scale;
     if (w === 0 && h === 0) {
-      scale = 2; // Default zoom for isolated node
+      scale = 2;
     } else {
       scale = Math.min(
         (width - padding) / Math.max(1, w),
@@ -273,7 +321,7 @@ export function GraphVisualizer({ records, obfuscated }: { records: ConnectionRe
       scale = Math.max(0.1, Math.min(scale, 4));
     }
 
-    const transform = d3.zoomIdentity
+    const t = d3.zoomIdentity
       .translate(width / 2, height / 2)
       .scale(scale)
       .translate(-cx, -cy);
@@ -281,72 +329,73 @@ export function GraphVisualizer({ records, obfuscated }: { records: ConnectionRe
     d3.select(containerRef.current)
       .transition()
       .duration(750)
-      .call(zoomRef.current.transform, transform);
-      
+      .call(zoomRef.current.transform, t);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedNodeId]);
 
-  // Pause physics during animation, resume after
+  // Pause physics during obfuscation animation, resume after
   const prevObfuscated = useRef(obfuscated);
   useEffect(() => {
     if (prevObfuscated.current === obfuscated) return;
     prevObfuscated.current = obfuscated;
     const sim = simRef.current;
     if (!sim) return;
-    // Freeze physics
     sim.stop();
-    // Resume after animation completes (~900ms: max stagger 400 + anim ~500)
     const t = setTimeout(() => sim.restart(), 900);
     return () => clearTimeout(t);
   }, [obfuscated]);
 
-  const [draggedNode, setDraggedNode] = useState<Node | null>(null);
+  // --- Drag handling: refs instead of state to avoid re-renders during drag ---
+  const draggedNodeRef = useRef<Node | null>(null);
   const pointerStartPos = useRef<{x: number, y: number} | null>(null);
 
-  const handlePointerDown = (e: React.PointerEvent, node: Node) => {
+  const handlePointerDown = useCallback((e: React.PointerEvent, node: Node) => {
     e.stopPropagation();
     pointerStartPos.current = { x: e.clientX, y: e.clientY };
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
     if (simRef.current) simRef.current.alphaTarget(0.3).restart();
     node.fx = node.x;
     node.fy = node.y;
-    setDraggedNode(node);
-  };
+    draggedNodeRef.current = node;
+  }, []);
 
-  const handlePointerMove = (e: React.PointerEvent) => {
-    if (!draggedNode || !containerRef.current) return;
+  const handlePointerMove = useCallback((e: React.PointerEvent) => {
+    const dragged = draggedNodeRef.current;
+    if (!dragged || !containerRef.current) return;
     e.stopPropagation();
     const rect = containerRef.current.getBoundingClientRect();
-    const x = (e.clientX - rect.left - transform.x) / transform.k;
-    const y = (e.clientY - rect.top - transform.y) / transform.k;
-    draggedNode.fx = x;
-    draggedNode.fy = y;
-  };
+    const t = transformRef.current;
+    const x = (e.clientX - rect.left - t.x) / t.k;
+    const y = (e.clientY - rect.top - t.y) / t.k;
+    dragged.fx = x;
+    dragged.fy = y;
+  }, []);
 
-  const handlePointerUp = (e: React.PointerEvent) => {
-    if (draggedNode) {
+  const handlePointerUp = useCallback((e: React.PointerEvent) => {
+    const dragged = draggedNodeRef.current;
+    if (dragged) {
       e.stopPropagation();
       if (simRef.current) simRef.current.alphaTarget(0);
-      draggedNode.fx = null;
-      draggedNode.fy = null;
-      
+      dragged.fx = null;
+      dragged.fy = null;
+
       if (pointerStartPos.current) {
         const dx = e.clientX - pointerStartPos.current.x;
         const dy = e.clientY - pointerStartPos.current.y;
         if (Math.abs(dx) < 5 && Math.abs(dy) < 5) {
-          setSelectedNodeId(prev => prev === draggedNode.id ? null : draggedNode.id);
+          setSelectedNodeId(prev => prev === dragged.id ? null : dragged.id);
         }
       }
-      
+
       pointerStartPos.current = null;
-      setDraggedNode(null);
+      draggedNodeRef.current = null;
       (e.target as HTMLElement).releasePointerCapture(e.pointerId);
     }
-  };
+  }, []);
 
   return (
-      <div 
-        ref={containerRef} 
+      <div
+        ref={containerRef}
         onPointerDown={(e) => {
           if (!(e.target as Element).closest('.d3-node')) setSelectedNodeId(null);
         }}
@@ -354,11 +403,11 @@ export function GraphVisualizer({ records, obfuscated }: { records: ConnectionRe
       >
         <svg className="absolute inset-0 w-full h-full pointer-events-none">
           <defs>
-            <pattern 
-              id="asciiGrid" 
-              width="60" height="40" 
+            <pattern
+              ref={patternRef}
+              id="asciiGrid"
+              width="60" height="40"
               patternUnits="userSpaceOnUse"
-              patternTransform={`translate(${transform.x}, ${transform.y}) scale(${transform.k})`}
             >
               <text x="0" y="15" fill="rgba(34, 197, 94, 0.2)" fontSize="14" fontFamily="monospace">+</text>
               <text x="15" y="15" fill="rgba(34, 197, 94, 0.15)" fontSize="14" fontFamily="monospace">_</text>
@@ -368,53 +417,49 @@ export function GraphVisualizer({ records, obfuscated }: { records: ConnectionRe
             </pattern>
           </defs>
           <rect width="100%" height="100%" fill="url(#asciiGrid)" />
-          <g transform={`translate(${transform.x},${transform.y}) scale(${transform.k})`}>
-            {links.map((link, i) => {
-              const src = link.source as Node;
-              const tgt = link.target as Node;
-              if (src.x == null || src.y == null || tgt.x == null || tgt.y == null) return null;
-              
-              const isFaded = selectedNodeId ? (src.id !== selectedNodeId && tgt.id !== selectedNodeId) : false;
-              
+          <g ref={svgGroupRef}>
+            {renderLinks.map((link, i) => {
+              const srcId = typeof link.source === 'object' ? (link.source as Node).id : String(link.source);
+              const tgtId = typeof link.target === 'object' ? (link.target as Node).id : String(link.target);
+              const isFaded = selectedNodeId ? (srcId !== selectedNodeId && tgtId !== selectedNodeId) : false;
+
               return (
-                <line 
+                <line
                   key={i}
-                  x1={src.x}
-                  y1={src.y}
-                  x2={tgt.x}
-                  y2={tgt.y}
+                  ref={el => { if (el) linkElsRef.current.set(i, el); }}
                   stroke="#22c55e"
                   strokeWidth={Math.max(0.5, link.score / 2)}
                   strokeOpacity={isFaded ? 0.05 : 0.2 + (link.score / 10) * 0.8}
-                  className="transition-opacity duration-300"
+                  className="transition-[stroke-opacity] duration-300"
                 />
               );
             })}
           </g>
         </svg>
 
-        <div className="absolute inset-0 pointer-events-none" style={{ transformOrigin: '0 0', transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.k})` }}>
-          {nodes.map((node, idx) => {
-            if (node.x == null || node.y == null) return null;
+        <div
+          ref={nodeContainerRef}
+          className="absolute inset-0 pointer-events-none"
+          style={{ transformOrigin: '0 0' }}
+        >
+          {renderNodes.map((node, idx) => {
             const isSelected = selectedNodeId === node.id;
             const isNeighbor = neighborSet.has(node.id);
             const isFaded = selectedNodeId ? (!isSelected && !isNeighbor) : false;
             const shouldObfuscate = obfuscated && !(isSelected || isNeighbor);
 
             return (
-              <div 
+              <div
                 key={node.id}
-                style={{ 
-                  transform: `translate(${node.x}px, ${node.y}px) translate(-50%, -50%)`,
-                  opacity: isFaded ? 0.3 : 1
-                }}
-                className={`d3-node absolute px-1 font-bold text-xs cursor-grab active:cursor-grabbing pointer-events-auto select-none border shadow-[0_0_10px_rgba(0,0,0,0.8)] rounded-sm transition-all duration-300 ${isSelected ? 'bg-green-400 text-zinc-950 border-green-400 z-10' : 'bg-zinc-950 text-green-400 border-green-900/30'}`}
+                ref={el => { if (el) nodeElsRef.current.set(node.id, el); }}
+                style={{ opacity: isFaded ? 0.3 : 1 }}
+                className={`d3-node absolute px-1 font-bold text-xs cursor-grab active:cursor-grabbing pointer-events-auto select-none border shadow-[0_0_10px_rgba(0,0,0,0.8)] rounded-sm transition-[color,background-color,border-color,opacity,box-shadow] duration-300 ${isSelected ? 'bg-green-400 text-zinc-950 border-green-400 z-10' : 'bg-zinc-950 text-green-400 border-green-900/30'}`}
                 onPointerDown={(e) => handlePointerDown(e, node)}
                 onPointerMove={handlePointerMove}
                 onPointerUp={handlePointerUp}
                 onPointerCancel={handlePointerUp}
               >
-                <NodeLabel name={node.id} obfuscated={shouldObfuscate} index={idx} totalNodes={nodes.length} />
+                <NodeLabel name={node.id} obfuscated={shouldObfuscate} index={idx} totalNodes={renderNodes.length} />
               </div>
             );
           })}
@@ -432,7 +477,6 @@ function NodeLabel({ name, obfuscated, index, totalNodes }: { name: string, obfu
     if (!el || prevObfuscated.current === obfuscated) return;
     prevObfuscated.current = obfuscated;
 
-    // Stagger: spread nodes evenly over 400ms window
     const staggerDelay = totalNodes > 1 ? (index / totalNodes) * 400 : 0;
     scheduleNodeAnim(name, el, obfuscated, staggerDelay);
   }, [obfuscated, name, index, totalNodes]);
@@ -449,8 +493,8 @@ export function GraphPage({ records, onClose }: { records: ConnectionRecord[], o
     <div className="absolute inset-0 bg-zinc-950 text-green-500 font-mono flex flex-col z-50">
       <div className="p-4 border-b border-green-900/50 flex justify-between items-center shrink-0">
         <h2 className="text-xl font-bold uppercase tracking-wider text-green-400 w-24">Graph</h2>
-        <button 
-          onClick={() => setObfuscated(!obfuscated)} 
+        <button
+          onClick={() => setObfuscated(!obfuscated)}
           className="text-green-400 hover:text-green-300 font-bold tracking-widest px-4 py-1 border border-green-900/50 rounded bg-green-900/20"
         >
           {obfuscated ? '*' : '****'}
